@@ -10,4 +10,8 @@ enum class MenuId {
     COMBAT,
     LOGISTICS,
     RPG_LINK,
+    ;
+
+    val configKey: String
+        get() = name.lowercase().replace('_', '-')
 }

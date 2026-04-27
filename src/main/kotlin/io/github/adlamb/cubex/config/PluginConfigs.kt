@@ -6,6 +6,7 @@ data class PluginConfigs(
     val placeholderMenuRows: Int,
     val validateDatabaseOnStartup: Boolean,
     val database: DatabaseConfig,
+    val menuItems: MenuItemConfigs,
 )
 
 enum class DatabaseMode {

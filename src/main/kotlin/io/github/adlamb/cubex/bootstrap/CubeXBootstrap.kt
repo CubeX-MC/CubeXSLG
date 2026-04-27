@@ -30,7 +30,7 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
         val database = DatabaseManager(plugin, configs.database, coroutines)
         val registry = GameplayRegistry.load(plugin)
         val keys = MarkerKeys(plugin)
-        val menuFactory = MenuFactory(plugin, messages, configs)
+        val menuFactory = MenuFactory(plugin, messages, configs, configs.menuItems)
         val gameplay = GameplayFacade(
             plugin = plugin,
             configs = configs,

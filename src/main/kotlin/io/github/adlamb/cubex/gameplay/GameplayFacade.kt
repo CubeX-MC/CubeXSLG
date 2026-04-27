@@ -4,9 +4,12 @@ import io.github.adlamb.cubex.config.PluginConfigs
 import io.github.adlamb.cubex.database.DatabaseManager
 import io.github.adlamb.cubex.gameplay.model.*
 import io.github.adlamb.cubex.gameplay.storage.*
-import io.github.adlamb.cubex.menu.MenuButton
+import io.github.adlamb.cubex.menu.MenuBodyEntry
+import io.github.adlamb.cubex.menu.MenuButtonContext
+import io.github.adlamb.cubex.menu.MenuDynamicEntry
 import io.github.adlamb.cubex.menu.MenuFactory
 import io.github.adlamb.cubex.menu.MenuId
+import io.github.adlamb.cubex.menu.MenuRenderContext
 import io.github.adlamb.cubex.message.MessageService
 import io.github.adlamb.cubex.platform.SchedulerFacade
 import io.github.adlamb.cubex.registry.BuildingDescriptor
@@ -135,42 +138,32 @@ class GameplayFacade(
         return true
     }
 
+    private fun lineEntry(line: String): MenuBodyEntry = MenuBodyEntry(mapOf("line" to line))
+
     fun openTownHall(player: Player) {
         val town = townOf(player)
-        val body = listOf(
-            Component.text("城镇: ${town?.name ?: "未创建"}"),
-            Component.text("建筑上限: ${town?.buildingLimit ?: 0}"),
-            Component.text("居民上限: ${town?.residentLimit ?: 0}"),
-            Component.text("领地半径: ${town?.radius ?: 0}"),
-        )
         menuFactory.open(
             player = player,
             menuId = MenuId.TOWN_HALL,
-            title = "城府管理",
-            body = body,
-            buttons = listOf(
-                MenuButton(10, Material.BARREL, Component.text("仓储"), listOf(Component.text("查看资源与历史"))) {
-                    openStorage(it)
-                },
-                MenuButton(11, Material.VILLAGER_SPAWN_EGG, Component.text("居民"), listOf(Component.text("查看居民与招募"))) {
-                    openResidents(it)
-                },
-                MenuButton(12, Material.ENCHANTING_TABLE, Component.text("科技"), listOf(Component.text("研究科技"))) {
-                    openTech(it)
-                },
-                MenuButton(13, Material.CHEST, Component.text("生产"), listOf(Component.text("生产概览"))) {
-                    openProduction(it)
-                },
-                MenuButton(14, Material.IRON_SWORD, Component.text("战斗"), listOf(Component.text("防御与受损状态"))) {
-                    openCombat(it)
-                },
-                MenuButton(15, Material.MINECART, Component.text("物流"), listOf(Component.text("铁轨与路由"))) {
-                    openLogistics(it)
-                },
-                MenuButton(16, Material.NETHER_STAR, Component.text("边界"), listOf(Component.text("显示15秒边界预览"))) {
-                    showBorder(it)
-                    Unit
-                },
+            context = MenuRenderContext(
+                bodyEntries = listOf(
+                    lineEntry("城镇: ${town?.name ?: "未创建"}"),
+                    lineEntry("建筑上限: ${town?.buildingLimit ?: 0}"),
+                    lineEntry("居民上限: ${town?.residentLimit ?: 0}"),
+                    lineEntry("领地半径: ${town?.radius ?: 0}"),
+                ),
+                buttons = mapOf(
+                    "storage" to MenuButtonContext(action = { openStorage(it) }),
+                    "residents" to MenuButtonContext(action = { openResidents(it) }),
+                    "tech" to MenuButtonContext(action = { openTech(it) }),
+                    "production" to MenuButtonContext(action = { openProduction(it) }),
+                    "combat" to MenuButtonContext(action = { openCombat(it) }),
+                    "logistics" to MenuButtonContext(action = { openLogistics(it) }),
+                    "border" to MenuButtonContext(action = {
+                        showBorder(it)
+                        Unit
+                    }),
+                ),
             ),
         )
     }
@@ -181,20 +174,17 @@ class GameplayFacade(
         val latest = repository.ledger(town.id, 5)
         val body = registry.resources.values.sortedBy { it.category.ordinal }.map { resource ->
             val amount = balances[resource.key] ?: 0L
-            Component.text("${resource.displayName}: $amount")
-        } + Component.text("最近变动: ${latest.size} 条")
+            lineEntry("${resource.displayName}: $amount")
+        } + lineEntry("最近变动: ${latest.size} 条")
         menuFactory.open(
-            player,
-            MenuId.STORAGE,
-            "仓储总览",
-            body,
-            listOf(
-                MenuButton(21, Material.PAPER, Component.text("历史"), listOf(Component.text("查看最近100条记录"))) {
-                    sendResourceHistory(it, town.id)
-                },
-                MenuButton(23, Material.WRITABLE_BOOK, Component.text("统计"), listOf(Component.text("查看资源统计"))) {
-                    sendResourceStats(it, town.id)
-                },
+            player = player,
+            menuId = MenuId.STORAGE,
+            context = MenuRenderContext(
+                bodyEntries = body,
+                buttons = mapOf(
+                    "history" to MenuButtonContext(action = { sendResourceHistory(it, town.id) }),
+                    "stats" to MenuButtonContext(action = { sendResourceStats(it, town.id) }),
+                ),
             ),
         )
     }
@@ -203,21 +193,22 @@ class GameplayFacade(
         val town = townOf(player) ?: return messages.send(player, "town.missing")
         val residents = repository.residentsByTown(town.id)
         val body = buildList {
-            add(Component.text("居民数量: ${residents.size}/${town.residentLimit}"))
+            add(lineEntry("居民数量: ${residents.size}/${town.residentLimit}"))
             residents.take(7).forEach { resident ->
-                add(Component.text("${resident.name} | 力:${resident.strength} 敏:${resident.agility} 智:${resident.intelligence}"))
+                add(lineEntry("${resident.name} | 力:${resident.strength} 敏:${resident.agility} 智:${resident.intelligence}"))
             }
         }
         menuFactory.open(
-            player,
-            MenuId.RESIDENT,
-            "居民管理",
-            body,
-            listOf(
-                MenuButton(22, Material.EMERALD, Component.text("招募"), listOf(Component.text("消耗粮食招募居民"))) {
-                    recruit(it)
-                    Unit
-                },
+            player = player,
+            menuId = MenuId.RESIDENT,
+            context = MenuRenderContext(
+                bodyEntries = body,
+                buttons = mapOf(
+                    "recruit" to MenuButtonContext(action = {
+                        recruit(it)
+                        Unit
+                    }),
+                ),
             ),
         )
     }
@@ -225,24 +216,34 @@ class GameplayFacade(
     fun openTech(player: Player) {
         val town = townOf(player) ?: return messages.send(player, "town.missing")
         val researched = repository.techProgress(town.id)
+        val techNodes = registry.techNodes.values.sortedBy { it.branch.ordinal * 100 + it.townLevel }
         val body = buildList {
-            add(Component.text("已研究: ${researched.size}"))
-            registry.techNodes.values.sortedBy { it.branch.ordinal * 100 + it.townLevel }.take(8).forEach { tech ->
+            add(lineEntry("已研究: ${researched.size}"))
+            techNodes.take(8).forEach { tech ->
                 val flag = if (researched.contains(tech.key)) "已解锁" else "未解锁"
-                add(Component.text("${tech.displayName} [$flag]"))
+                add(lineEntry("${tech.displayName} [$flag]"))
             }
         }
         menuFactory.open(
-            player,
-            MenuId.TECH,
-            "科技树",
-            body,
-            registry.techNodes.values.sortedBy { it.branch.ordinal * 100 + it.townLevel }.take(6).mapIndexed { index, tech ->
-                MenuButton(10 + index, Material.LECTERN, Component.text(tech.displayName), listOf(Component.text("点击研究"))) {
-                    research(it, tech.key)
-                    Unit
-                }
-            },
+            player = player,
+            menuId = MenuId.TECH,
+            context = MenuRenderContext(
+                bodyEntries = body,
+                dynamicLists = mapOf(
+                    "tech-list" to techNodes.take(6).map { tech ->
+                        MenuDynamicEntry(
+                            placeholders = mapOf(
+                                "tech_name" to tech.displayName,
+                                "tech_hint" to "点击研究",
+                            ),
+                            action = {
+                                research(it, tech.key)
+                                Unit
+                            },
+                        )
+                    },
+                ),
+            ),
         )
     }
 
@@ -250,67 +251,79 @@ class GameplayFacade(
         val town = townOf(player) ?: return messages.send(player, "town.missing")
         val balances = repository.loadBalances(town.id)
         val body = listOf(
-            Component.text("木材: ${balances["wood"] ?: 0L}"),
-            Component.text("石头: ${balances["stone"] ?: 0L}"),
-            Component.text("矿石: ${balances["ore"] ?: 0L}"),
-            Component.text("粮食: ${balances["food"] ?: 0L}"),
+            lineEntry("木材: ${balances["wood"] ?: 0L}"),
+            lineEntry("石头: ${balances["stone"] ?: 0L}"),
+            lineEntry("矿石: ${balances["ore"] ?: 0L}"),
+            lineEntry("粮食: ${balances["food"] ?: 0L}"),
         )
-        menuFactory.open(player, MenuId.PRODUCTION, "生产系统", body, emptyList())
+        menuFactory.open(
+            player = player,
+            menuId = MenuId.PRODUCTION,
+            context = MenuRenderContext(bodyEntries = body),
+        )
     }
 
     fun openBuildingMenu(player: Player, buildingId: String) {
         val building = repository.buildingById(BuildingId(buildingId)) ?: return
         val descriptor = registry.findBuilding(building.buildingKey)
         val body = buildList {
-            add(Component.text("建筑: ${descriptor?.displayName ?: building.buildingKey}"))
-            add(Component.text("等级: ${building.level}"))
-            add(Component.text("生命值: ${building.health}/${building.maxHealth}"))
-            add(Component.text("状态: ${if (building.collapsed) "坍塌" else "运行中"}"))
+            add(lineEntry("建筑: ${descriptor?.displayName ?: building.buildingKey}"))
+            add(lineEntry("等级: ${building.level}"))
+            add(lineEntry("生命值: ${building.health}/${building.maxHealth}"))
+            add(lineEntry("状态: ${if (building.collapsed) "坍塌" else "运行中"}"))
         }
         menuFactory.open(
-            player,
-            MenuId.BUILDING,
-            descriptor?.displayName ?: building.buildingKey,
-            body,
-            listOf(
-                MenuButton(10, Material.DIAMOND, Component.text("升级"), listOf(Component.text("提升建筑等级"))) {
-                    upgradeBuilding(it, building.id.value)
-                    Unit
-                },
-                MenuButton(12, Material.PAPER, Component.text("移动"), listOf(Component.text("创建移动待确认"))) {
-                    requestMoveById(it, building.id.value)
-                    Unit
-                },
-                MenuButton(14, Material.BARRIER, Component.text("删除"), listOf(Component.text("创建删除待确认"))) {
-                    requestDeleteById(it, building.id.value)
-                    Unit
-                },
-                MenuButton(16, Material.ANVIL, Component.text("修复"), listOf(Component.text("消耗资源恢复生命"))) {
-                    repairBuilding(it, building.id.value)
-                    Unit
-                },
+            player = player,
+            menuId = MenuId.BUILDING,
+            context = MenuRenderContext(
+                placeholders = mapOf(
+                    "building_name" to (descriptor?.displayName ?: building.buildingKey),
+                ),
+                bodyEntries = body,
+                buttons = mapOf(
+                    "upgrade" to MenuButtonContext(action = {
+                        upgradeBuilding(it, building.id.value)
+                        Unit
+                    }),
+                    "move" to MenuButtonContext(action = {
+                        requestMoveById(it, building.id.value)
+                        Unit
+                    }),
+                    "delete" to MenuButtonContext(action = {
+                        requestDeleteById(it, building.id.value)
+                        Unit
+                    }),
+                    "repair" to MenuButtonContext(action = {
+                        repairBuilding(it, building.id.value)
+                        Unit
+                    }),
+                ),
             ),
         )
     }
 
     fun openCombat(player: Player) {
-        menuFactory.openInfo(player, MenuId.COMBAT, "战斗系统", "建筑受损、哨塔防御和兵营训练状态由数据库维护。")
+        menuFactory.openInfo(player, MenuId.COMBAT, "建筑受损、哨塔防御和兵营训练状态由数据库维护。")
     }
 
     fun openLogistics(player: Player) {
         val town = townOf(player) ?: return messages.send(player, "town.missing")
         val routes = repository.routes(town.id)
         val body = buildList {
-            add(Component.text("路由数量: ${routes.size}"))
+            add(lineEntry("路由数量: ${routes.size}"))
             routes.take(5).forEach { route ->
-                add(Component.text("${route.name}: ${route.throughput}/s, 饱和 ${"%.0f".format(route.saturation * 100)}%"))
+                add(lineEntry("${route.name}: ${route.throughput}/s, 饱和 ${"%.0f".format(route.saturation * 100)}%"))
             }
         }
-        menuFactory.open(player, MenuId.LOGISTICS, "物流系统", body, emptyList())
+        menuFactory.open(
+            player = player,
+            menuId = MenuId.LOGISTICS,
+            context = MenuRenderContext(bodyEntries = body),
+        )
     }
 
     fun openRpgLink(player: Player) {
-        menuFactory.openInfo(player, MenuId.RPG_LINK, "RPG 联动", "仅保留桥接状态，不接外部插件。")
+        menuFactory.openInfo(player, MenuId.RPG_LINK, "仅保留桥接状态，不接外部插件。")
     }
 
     fun giveWand(player: Player, buildingKey: String): Boolean {
