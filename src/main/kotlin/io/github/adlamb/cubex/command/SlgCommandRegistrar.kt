@@ -9,7 +9,7 @@ import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEven
 class SlgCommandRegistrar(
     private val runtime: PluginRuntime,
 ) {
-    fun register(event: ReloadableRegistrarEvent<io.papermc.paper.command.brigadier.Commands>) {
+    fun register(event: ReloadableRegistrarEvent<Commands>) {
         event.registrar().register(createRootCommand().build())
     }
 

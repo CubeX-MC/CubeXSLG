@@ -4,8 +4,10 @@ import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
 import io.github.adlamb.cubex.gameplay.model.BuildingId
 import io.github.adlamb.cubex.module.FeatureModule
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
+import org.bukkit.block.TileState
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -19,7 +21,7 @@ class CombatListener(
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
         val state = event.block.state
-        val buildingId = (state as? org.bukkit.block.TileState)
+        val buildingId = (state as? TileState)
             ?.persistentDataContainer
             ?.get(context.keys.buildingId, PersistentDataType.STRING)
             ?: return
@@ -31,7 +33,7 @@ class CombatListener(
     @EventHandler
     fun onExplode(event: EntityExplodeEvent) {
         event.blockList().forEach { block ->
-            val buildingId = (block.state as? org.bukkit.block.TileState)
+            val buildingId = (block.state as? TileState)
                 ?.persistentDataContainer
                 ?.get(context.keys.buildingId, PersistentDataType.STRING)
                 ?: return@forEach
@@ -56,7 +58,7 @@ class CombatListener(
 class CombatCommands(
     private val context: PluginContext,
 ) : CommandContributor {
-    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
+    override fun contribute(root: LiteralArgumentBuilder<CommandSourceStack>) {
         root.then(
             Commands.literal("combat").executes { command ->
                 val player = command.source.sender as? Player ?: return@executes 0

@@ -2,9 +2,11 @@ package io.github.adlamb.cubex.gameplay.storage
 
 import io.github.adlamb.cubex.gameplay.model.*
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -12,7 +14,7 @@ import java.util.UUID
 
 class GameplayRepository {
     fun initializeSchema() = transaction {
-        org.jetbrains.exposed.v1.jdbc.SchemaUtils.create(
+        SchemaUtils.create(
             TownsTable,
             ResourceBalancesTable,
             ResourceLedgerTable,
@@ -350,7 +352,7 @@ class GameplayRepository {
             }
     }
 
-    private fun org.jetbrains.exposed.v1.core.ResultRow.toTownState(): TownState = TownState(
+    private fun ResultRow.toTownState(): TownState = TownState(
         id = TownId(this[TownsTable.id]),
         ownerUuid = UUID.fromString(this[TownsTable.ownerUuid]),
         name = this[TownsTable.name],
@@ -368,7 +370,7 @@ class GameplayRepository {
         updatedAt = this[TownsTable.updatedAt],
     )
 
-    private fun org.jetbrains.exposed.v1.core.ResultRow.toBuildingState(): BuildingState = BuildingState(
+    private fun ResultRow.toBuildingState(): BuildingState = BuildingState(
         id = BuildingId(this[BuildingsTable.id]),
         townId = TownId(this[BuildingsTable.townId]),
         buildingKey = this[BuildingsTable.buildingKey],
@@ -387,7 +389,7 @@ class GameplayRepository {
         updatedAt = this[BuildingsTable.updatedAt],
     )
 
-    private fun org.jetbrains.exposed.v1.core.ResultRow.toResidentState(): ResidentState = ResidentState(
+    private fun ResultRow.toResidentState(): ResidentState = ResidentState(
         id = ResidentId(this[ResidentsTable.id]),
         townId = TownId(this[ResidentsTable.townId]),
         uuid = UUID.fromString(this[ResidentsTable.uuid]),

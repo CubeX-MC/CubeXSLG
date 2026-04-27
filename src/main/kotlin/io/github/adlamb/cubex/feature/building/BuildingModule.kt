@@ -1,11 +1,13 @@
 package io.github.adlamb.cubex.feature.building
 
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
 import io.github.adlamb.cubex.module.FeatureModule
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
+import org.bukkit.block.BlockFace
 import org.bukkit.block.TileState
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -25,7 +27,7 @@ class BuildingListener(
             return
         }
         val clicked = event.clickedBlock ?: event.player.getTargetBlockExact(6) ?: return
-        val face = if (event.action == Action.RIGHT_CLICK_BLOCK) event.blockFace else org.bukkit.block.BlockFace.UP
+        val face = if (event.action == Action.RIGHT_CLICK_BLOCK) event.blockFace else BlockFace.UP
         event.isCancelled = true
         context.gameplay.handleWandPlacement(event.player, wandKey, clicked, face)
     }
@@ -53,7 +55,7 @@ class BuildingListener(
 class BuildingCommands(
     private val context: PluginContext,
 ) : CommandContributor {
-    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
+    override fun contribute(root: LiteralArgumentBuilder<CommandSourceStack>) {
         root.then(
             Commands.literal("wand")
                 .then(

@@ -1,6 +1,7 @@
 package io.github.adlamb.cubex.feature.town
 
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
 import io.github.adlamb.cubex.module.FeatureModule
@@ -41,7 +42,7 @@ class TownListener(
 class TownCommands(
     private val context: PluginContext,
 ) : CommandContributor {
-    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
+    override fun contribute(root: LiteralArgumentBuilder<CommandSourceStack>) {
         root.then(
             Commands.literal("create")
                 .then(

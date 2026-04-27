@@ -3,6 +3,7 @@ package io.github.adlamb.cubex.feature.tech
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
 import io.github.adlamb.cubex.module.FeatureModule
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import org.bukkit.entity.Player
@@ -13,7 +14,7 @@ class TechListener : Listener
 class TechCommands(
     private val context: PluginContext,
 ) : CommandContributor {
-    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
+    override fun contribute(root: LiteralArgumentBuilder<CommandSourceStack>) {
         root.then(
             Commands.literal("tech").executes { command ->
                 val player = command.source.sender as? Player ?: return@executes 0
