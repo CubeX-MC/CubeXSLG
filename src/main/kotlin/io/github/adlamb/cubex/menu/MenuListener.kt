@@ -1,19 +1,16 @@
 package io.github.adlamb.cubex.menu
 
-import io.github.adlamb.cubex.message.MessageService
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
 
-class MenuListener(
-    private val messages: MessageService,
-) : Listener {
+class MenuListener : Listener {
     @EventHandler
     fun onInventoryClick(event: InventoryClickEvent) {
-        if (event.inventory.holder !is MenuHolder) {
-            return
-        }
-
+        val holder = event.inventory.holder as? MenuHolder ?: return
         event.isCancelled = true
+        val player = event.whoClicked as? Player ?: return
+        holder.actions[event.rawSlot]?.invoke(player)
     }
 }

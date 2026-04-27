@@ -2,35 +2,73 @@ package io.github.adlamb.cubex.feature.combat
 
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
-import io.github.adlamb.cubex.menu.MenuId
+import io.github.adlamb.cubex.gameplay.model.BuildingId
 import io.github.adlamb.cubex.module.FeatureModule
+import io.papermc.paper.command.brigadier.CommandSourceStack
+import io.papermc.paper.command.brigadier.Commands
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.persistence.PersistentDataType
 
-data class CombatModel(val placeholder: String = "combat")
+class CombatListener(
+    private val context: PluginContext,
+) : Listener {
+    @EventHandler
+    fun onBlockBreak(event: BlockBreakEvent) {
+        val state = event.block.state
+        val buildingId = (state as? org.bukkit.block.TileState)
+            ?.persistentDataContainer
+            ?.get(context.keys.buildingId, PersistentDataType.STRING)
+            ?: return
+        event.isCancelled = true
+        val record = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return
+        buildingDamage(record.id.value, 20)
+    }
 
-class CombatRepository
+    @EventHandler
+    fun onExplode(event: EntityExplodeEvent) {
+        event.blockList().forEach { block ->
+            val buildingId = (block.state as? org.bukkit.block.TileState)
+                ?.persistentDataContainer
+                ?.get(context.keys.buildingId, PersistentDataType.STRING)
+                ?: return@forEach
+            val record = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return@forEach
+            buildingDamage(record.id.value, 15)
+        }
+    }
 
-class CombatService
-
-class CombatUi(private val context: PluginContext) {
-    fun open(player: Player) {
-        context.menuFactory.openPlaceholder(player, MenuId.COMBAT, "战斗系统", "建筑生命值、哨塔防御、兵营训练入口已预留。")
+    private fun buildingDamage(buildingId: String, amount: Int) {
+        val building = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return
+        val nextHealth = (building.health - amount).coerceAtLeast(0)
+        val updated = building.copy(
+            health = nextHealth,
+            collapsed = nextHealth <= building.maxHealth / 2,
+            active = nextHealth > building.maxHealth / 2,
+            updatedAt = System.currentTimeMillis(),
+        )
+        context.gameplay.repository.updateBuilding(updated)
     }
 }
 
-class CombatListener : Listener
-
-class CombatCommands : CommandContributor {
-    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<io.papermc.paper.command.brigadier.CommandSourceStack>) = Unit
+class CombatCommands(
+    private val context: PluginContext,
+) : CommandContributor {
+    override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
+        root.then(
+            Commands.literal("combat").executes { command ->
+                val player = command.source.sender as? Player ?: return@executes 0
+                context.gameplay.openCombat(player)
+                1
+            },
+        )
+    }
 }
 
 class CombatModule(context: PluginContext) : FeatureModule {
     override val id: String = "combat"
-    override val listeners: List<Listener> = listOf(CombatListener())
-    override val commandContributors: List<CommandContributor> = listOf(CombatCommands())
-
-    private val repository = CombatRepository()
-    private val service = CombatService()
-    private val ui = CombatUi(context)
+    override val listeners: List<Listener> = listOf(CombatListener(context))
+    override val commandContributors: List<CommandContributor> = listOf(CombatCommands(context))
 }

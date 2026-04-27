@@ -1,24 +1,73 @@
 prefix: "<gold><bold>CubeXSLG</bold></gold><gray> | </gray>"
 
-startup.enabled: "<prefix><green>基础骨架已加载。平台: <platform>，数据库: <database></green>"
-startup.disabled: "<prefix><yellow>基础骨架已卸载。</yellow>"
-startup.database.connected: "<prefix><gray>数据库连接已建立: <database></gray>"
+startup:
+  enabled: "<prefix><green>玩法核心已加载。平台: <platform>，数据库: <database></green>"
+  disabled: "<prefix><yellow>玩法核心已卸载。</yellow>"
+  database:
+    connected: "<prefix><gray>数据库连接已建立: <database></gray>"
 
-error.player-only: "<prefix><red>这个入口暂时只能由玩家执行。</red>"
-error.no-permission: "<prefix><red>你没有权限执行这个操作。</red>"
-error.command-failed: "<prefix><red>命令执行失败: <reason></red>"
-error.unknown-building: "<prefix><red>未知建筑类型: <building></red>"
-error.database: "<prefix><red>数据库初始化失败: <reason></red>"
+error:
+  player-only: "<prefix><red>这个入口只能由玩家执行。</red>"
+  no-permission: "<prefix><red>你没有权限执行这个操作。</red>"
+  command-failed: "<prefix><red>命令执行失败: <reason></red>"
+  unknown-building: "<prefix><red>未知建筑类型: <building></red>"
+  database: "<prefix><red>数据库初始化失败: <reason></red>"
 
-command.help.header: "<prefix><yellow>CubeXSLG Base 已启用，当前只提供骨架入口。</yellow>"
-command.help.line.create: "<gray>/slg create <name></gray> <dark_gray>-</dark_gray> <white>创建城镇占位入口</white>"
-command.help.line.wand: "<gray>/slg wand <building></gray> <dark_gray>-</dark_gray> <white>获取建筑核心工具占位物品</white>"
-command.help.line.resources: "<gray>/slg resources [stats|history]</gray> <dark_gray>-</dark_gray> <white>仓储系统占位入口</white>"
-command.help.line.repair: "<gray>/slg repair</gray> <dark_gray>-</dark_gray> <white>建筑修复占位入口</white>"
-command.help.line.confirm: "<gray>/slg confirm</gray> <dark_gray>-</dark_gray> <white>确认操作占位入口</white>"
-command.help.line.residents: "<gray>/slg residents</gray> <dark_gray>-</dark_gray> <white>居民系统占位入口</white>"
-command.help.line.recruit: "<gray>/slg recruit</gray> <dark_gray>-</dark_gray> <white>招募居民占位入口</white>"
+town:
+  create:
+    exists: "<prefix><red>你已经拥有一个城镇。</red>"
+    overlap: "<prefix><red>当前位置与其他城镇冲突。</red>"
+    success: "<prefix><green>城镇 <name> 创建成功。</green>"
+  border:
+    preview: "<prefix><green>已显示边界预览，半径 <radius>。</green>"
+  missing: "<prefix><red>你还没有城镇。</red>"
 
-command.not-implemented: "<prefix><yellow><feature></yellow><gray> / </gray><white><action></white><gray> 入口已预留，尚未实现具体玩法。</gray>"
-command.wand.given: "<prefix><green>已发放 <building> 建筑核心。</green>"
-command.menu.opened: "<prefix><gray>已打开 <menu> 占位界面。</gray>"
+building:
+  locked: "<prefix><red><building> 尚未解锁。</red>"
+  outside-town: "<prefix><red><building> 必须放在你的领地内。</red>"
+  invalid-terrain: "<prefix><red><building> 位置地形不合法。</red>"
+  limit-reached: "<prefix><red>建筑数量已达上限 <limit>。</red>"
+  insufficient: "<prefix><red><building> 资源不足。</red>"
+  built: "<prefix><green>建筑已成功建造：<building>。</green>"
+  no-repair-needed: "<prefix><gray>该建筑当前不需要修复。</gray>"
+  repaired: "<prefix><green>建筑已修复：<building>。</green>"
+  upgraded: "<prefix><green>建筑已升级：<building>。</green>"
+  pending-delete: "<prefix><yellow>删除待确认，请执行 /slg confirm。</yellow>"
+  pending-move: "<prefix><yellow>移动待确认，请前往目标位置后执行 /slg confirm。</yellow>"
+  deleted: "<prefix><green>建筑已删除。</green>"
+  moved: "<prefix><green>建筑已移动。</green>"
+
+resident:
+  limit-reached: "<prefix><red>居民已达到上限。</red>"
+  insufficient-food: "<prefix><red>粮食不足，无法招募居民。</red>"
+  recruited: "<prefix><green>已招募居民：<name>。</green>"
+
+tech:
+  already: "<prefix><gray><tech> 已研究。</gray>"
+  town-level: "<prefix><red><tech> 需要城府 <level> 级。</red>"
+  prerequisite: "<prefix><red>前置科技未满足。</red>"
+  insufficient: "<prefix><red><tech> 研究资源不足。</red>"
+  researched: "<prefix><green>科技已研究：<tech>。</green>"
+
+resource:
+  history:
+    line: "<prefix><gray><delta></gray> <white><resource></white> <dark_gray>来自</dark_gray> <gray><source></gray>"
+  stats:
+    line: "<prefix><gray>资源统计：收入 <income>，消耗 <expense>。</gray>"
+
+command:
+  help:
+    header: "<prefix><yellow>CubeXSLG 玩法命令。</yellow>"
+    line:
+      create: "<gray>/slg create <name></gray> <dark_gray>-</dark_gray> <white>创建城镇</white>"
+      wand: "<gray>/slg wand <building></gray> <dark_gray>-</dark_gray> <white>获取建筑核心</white>"
+      resources: "<gray>/slg resources [stats|history]</gray> <dark_gray>-</dark_gray> <white>查看仓储</white>"
+      repair: "<gray>/slg repair</gray> <dark_gray>-</dark_gray> <white>修复瞄准的建筑</white>"
+      confirm: "<gray>/slg confirm</gray> <dark_gray>-</dark_gray> <white>确认移动或删除</white>"
+      residents: "<gray>/slg residents</gray> <dark_gray>-</dark_gray> <white>查看居民</white>"
+      recruit: "<gray>/slg recruit</gray> <dark_gray>-</dark_gray> <white>招募居民</white>"
+      border: "<gray>/slg border</gray> <dark_gray>-</dark_gray> <white>显示领地边界</white>"
+  wand:
+    given: "<prefix><green>已发放 <building> 建筑核心。</green>"
+  menu:
+    opened: "<prefix><gray>已打开 <menu> 界面。</gray>"

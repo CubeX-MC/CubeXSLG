@@ -16,7 +16,7 @@ class ConfigService(private val plugin: JavaPlugin) {
         return PluginConfigs(
             locale = config.getString("locale", "zh-CN").orEmpty(),
             debug = config.getBoolean("debug", false),
-            placeholderMenuRows = config.getInt("menus.placeholder-rows", 3).coerceIn(1, 6),
+            placeholderMenuRows = config.getInt("menus.placeholder-rows", 4).coerceIn(1, 6),
             validateDatabaseOnStartup = config.getBoolean("startup.validate-database", true),
             database = DatabaseConfig(
                 mode = DatabaseMode.valueOf(database.getString("mode", "H2").orEmpty().uppercase()),

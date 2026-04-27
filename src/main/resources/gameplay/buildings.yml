@@ -1,0 +1,180 @@
+buildings:
+  lumberyard:
+    display-name: 伐木场
+    wand-material: IRON_AXE
+    core-material: BARREL
+    kind: GATHERING
+    build-cost:
+      wood: 20
+      stone: 10
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      output:
+        wood: 1
+  quarry:
+    display-name: 采石场
+    wand-material: STONE_PICKAXE
+    core-material: BARREL
+    kind: GATHERING
+    build-cost:
+      wood: 20
+      stone: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      output:
+        stone: 1
+  mine:
+    display-name: 矿场
+    wand-material: IRON_PICKAXE
+    core-material: BARREL
+    kind: GATHERING
+    build-cost:
+      wood: 30
+      stone: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      output:
+        ore: 1
+  farm:
+    display-name: 农场
+    wand-material: IRON_HOE
+    core-material: BARREL
+    kind: GATHERING
+    build-cost:
+      wood: 20
+      stone: 10
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      output:
+        food: 1
+  sawmill:
+    display-name: 木材加工厂
+    wand-material: STICK
+    core-material: BARREL
+    kind: PROCESSING
+    build-cost:
+      wood: 40
+      stone: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      input:
+        wood: 2
+      output:
+        plank: 1
+  masonry:
+    display-name: 石材加工厂
+    wand-material: BRICK
+    core-material: BARREL
+    kind: PROCESSING
+    build-cost:
+      wood: 40
+      stone: 30
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      input:
+        stone: 2
+      output:
+        brick: 1
+  alchemy:
+    display-name: 炼金厂
+    wand-material: BLAZE_POWDER
+    core-material: BARREL
+    kind: PROCESSING
+    build-cost:
+      ore: 30
+      stone: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    recipe:
+      cycle-ticks: 20
+      input:
+        ore: 2
+      output:
+        ingot: 1
+  barracks:
+    display-name: 兵营
+    wand-material: IRON_SWORD
+    core-material: BARREL
+    kind: SUPPORT
+    build-cost:
+      wood: 50
+      stone: 30
+      food: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+  watchtower:
+    display-name: 哨塔
+    wand-material: SPYGLASS
+    core-material: BARREL
+    kind: DEFENSE
+    build-cost:
+      wood: 30
+      stone: 40
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+  academy:
+    display-name: 学院
+    wand-material: BOOK
+    core-material: BARREL
+    kind: SUPPORT
+    build-cost:
+      wood: 40
+      stone: 40
+      food: 30
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+  warehouse:
+    display-name: 仓库
+    wand-material: BARREL
+    core-material: BARREL
+    kind: UTILITY
+    build-cost:
+      wood: 40
+      stone: 20
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL

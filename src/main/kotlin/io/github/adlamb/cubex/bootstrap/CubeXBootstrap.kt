@@ -3,6 +3,7 @@ package io.github.adlamb.cubex.bootstrap
 import io.github.adlamb.cubex.config.ConfigService
 import io.github.adlamb.cubex.coroutine.DefaultPluginCoroutines
 import io.github.adlamb.cubex.database.DatabaseManager
+import io.github.adlamb.cubex.gameplay.GameplayFacade
 import io.github.adlamb.cubex.feature.building.BuildingModule
 import io.github.adlamb.cubex.feature.combat.CombatModule
 import io.github.adlamb.cubex.feature.logistics.LogisticsModule
@@ -17,6 +18,7 @@ import io.github.adlamb.cubex.menu.MenuListener
 import io.github.adlamb.cubex.message.MessageService
 import io.github.adlamb.cubex.platform.PaperSchedulerFacade
 import io.github.adlamb.cubex.registry.GameplayRegistry
+import io.github.adlamb.cubex.shared.MarkerKeys
 import org.bukkit.plugin.java.JavaPlugin
 
 class CubeXBootstrap(private val plugin: JavaPlugin) {
@@ -26,12 +28,23 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
         val coroutines = DefaultPluginCoroutines(plugin)
         val scheduler = PaperSchedulerFacade(plugin)
         val database = DatabaseManager(plugin, configs.database, coroutines)
-        val registry = GameplayRegistry.default()
+        val registry = GameplayRegistry.load(plugin)
+        val keys = MarkerKeys(plugin)
         val menuFactory = MenuFactory(plugin, messages, configs)
-        val menuListener = MenuListener(messages)
+        val gameplay = GameplayFacade(
+            plugin = plugin,
+            configs = configs,
+            messages = messages,
+            scheduler = scheduler,
+            database = database,
+            registry = registry,
+            keys = keys,
+            menuFactory = menuFactory,
+        )
+        val menuListener = MenuListener()
 
+        gameplay.initialize()
         if (configs.validateDatabaseOnStartup) {
-            database.initialize()
             plugin.logger.info("CubeXSLG database initialized using ${configs.database.mode.name}.")
         }
 
@@ -43,8 +56,10 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
             scheduler = scheduler,
             database = database,
             registry = registry,
+            keys = keys,
             menuFactory = menuFactory,
             menuListener = menuListener,
+            gameplay = gameplay,
         )
 
         val modules = listOf(
@@ -60,6 +75,7 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
         )
 
         modules.forEach { it.onEnable() }
+        gameplay.start()
         return PluginRuntime(context, modules)
     }
 }

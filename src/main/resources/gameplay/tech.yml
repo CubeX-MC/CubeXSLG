@@ -1,0 +1,105 @@
+tech:
+  base_collect:
+    display-name: 基础采集
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites: []
+    cost: {}
+    unlock-buildings:
+      - lumberyard
+      - quarry
+  base_agriculture:
+    display-name: 基础农业
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites: []
+    cost: {}
+    unlock-buildings:
+      - farm
+  wood_defense:
+    display-name: 木质防御
+    branch: MILITARY
+    town-level: 1
+    prerequisites: []
+    cost: {}
+  mining_intro:
+    display-name: 矿业入门
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites:
+      - base_collect
+    cost:
+      stone: 50
+    unlock-buildings:
+      - mine
+  initial_processing:
+    display-name: 初级加工
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites:
+      - base_collect
+    cost:
+      wood: 50
+    unlock-buildings:
+      - sawmill
+      - masonry
+  crop_rotation:
+    display-name: 轮作制度
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites:
+      - base_agriculture
+    cost:
+      food: 100
+    production-multipliers:
+      food: 0.2
+  lookout:
+    display-name: 瞭望技术
+    branch: MILITARY
+    town-level: 1
+    prerequisites:
+      - wood_defense
+    cost:
+      stone: 50
+    unlock-buildings:
+      - watchtower
+  militia_training:
+    display-name: 民兵训练
+    branch: MILITARY
+    town-level: 1
+    prerequisites:
+      - wood_defense
+    cost:
+      wood: 50
+    unlock-buildings:
+      - barracks
+  resident_foundation:
+    display-name: 居民培养
+    branch: RESIDENT
+    town-level: 1
+    prerequisites:
+      - base_agriculture
+    cost:
+      food: 100
+    unlock-buildings:
+      - academy
+  logistics_basic:
+    display-name: 物流基础
+    branch: LOGISTICS
+    town-level: 1
+    prerequisites:
+      - initial_processing
+    cost:
+      plank: 50
+    unlock-buildings:
+      - warehouse
+  metal_smelting:
+    display-name: 金属冶炼
+    branch: PRODUCTION
+    town-level: 2
+    prerequisites:
+      - mining_intro
+    cost:
+      ore: 50
+    unlock-buildings:
+      - alchemy

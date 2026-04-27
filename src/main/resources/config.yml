@@ -2,7 +2,7 @@ locale: zh-CN
 debug: false
 
 menus:
-  placeholder-rows: 3
+  placeholder-rows: 4
 
 startup:
   validate-database: true

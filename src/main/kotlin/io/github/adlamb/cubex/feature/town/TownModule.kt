@@ -3,42 +3,43 @@ package io.github.adlamb.cubex.feature.town
 import com.mojang.brigadier.arguments.StringArgumentType
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
-import io.github.adlamb.cubex.menu.MenuId
-import io.github.adlamb.cubex.message.MessageService
 import io.github.adlamb.cubex.module.FeatureModule
-import io.github.adlamb.cubex.shared.PlaceholderResponses
+import io.github.adlamb.cubex.shared.MarkerKeys
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
-import org.bukkit.command.CommandSender
+import org.bukkit.block.TileState
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.block.Action
+import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.persistence.PersistentDataType
 
-data class TownCreateRequest(
-    val name: String,
-)
-
-class TownRepository
-
-class TownService(messages: MessageService) {
-    private val placeholders = PlaceholderResponses(messages, "城镇系统")
-
-    fun sendCreatePlaceholder(sender: CommandSender, request: TownCreateRequest) {
-        sender.sendMessage(placeholders.action("创建城镇: ${request.name}"))
+class TownListener(
+    private val context: PluginContext,
+) : Listener {
+    @EventHandler
+    fun onInteract(event: PlayerInteractEvent) {
+        if (event.action != Action.RIGHT_CLICK_BLOCK) {
+            return
+        }
+        if (context.gameplay.buildingFrom(event.item) != null) {
+            return
+        }
+        val block = event.clickedBlock ?: return
+        val state = block.state as? TileState ?: return
+        val container = state.persistentDataContainer
+        val buildingType = container.get(context.keys.buildingType, PersistentDataType.STRING) ?: return
+        if (buildingType != "town_hall") {
+            return
+        }
+        event.isCancelled = true
+        context.gameplay.openTownHall(event.player)
     }
 }
-
-class TownUi(private val context: PluginContext) {
-    fun openTownHall(player: Player) {
-        context.menuFactory.openPlaceholder(player, MenuId.TOWN_HALL, "城府管理", "城镇、建筑、仓储、科技、居民设置入口已预留。")
-    }
-}
-
-class TownListener : Listener
 
 class TownCommands(
     private val context: PluginContext,
-    private val service: TownService,
-    private val ui: TownUi,
 ) : CommandContributor {
     override fun contribute(root: com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) {
         root.then(
@@ -46,28 +47,26 @@ class TownCommands(
                 .then(
                     Commands.argument("name", StringArgumentType.greedyString())
                         .executes { command ->
-                            service.sendCreatePlaceholder(
-                                command.source.sender,
-                                TownCreateRequest(StringArgumentType.getString(command, "name")),
-                            )
-                            (command.source.sender as? Player)?.let(ui::openTownHall)
-                            1
+                            val sender = command.source.sender as? Player ?: return@executes 0
+                            context.gameplay.createTown(sender, StringArgumentType.getString(command, "name"))?.let {
+                                context.gameplay.openTownHall(sender)
+                                1
+                            } ?: 0
                         },
                 ),
+        )
+
+        root.then(
+            Commands.literal("border").executes { command ->
+                val sender = command.source.sender as? Player ?: return@executes 0
+                if (context.gameplay.showBorder(sender)) 1 else 0
+            },
         )
     }
 }
 
 class TownModule(context: PluginContext) : FeatureModule {
     override val id: String = "town"
-    override val listeners: List<Listener> = listOf(TownListener())
-    override val commandContributors: List<CommandContributor>
-
-    private val repository = TownRepository()
-    private val service = TownService(context.messages)
-    private val ui = TownUi(context)
-
-    init {
-        commandContributors = listOf(TownCommands(context, service, ui))
-    }
+    override val listeners: List<Listener> = emptyList()
+    override val commandContributors: List<CommandContributor> = listOf(TownCommands(context))
 }

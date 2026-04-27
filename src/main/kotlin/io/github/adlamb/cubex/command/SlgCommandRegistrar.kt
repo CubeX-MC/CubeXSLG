@@ -33,6 +33,7 @@ class SlgCommandRegistrar(
         runtime.context.messages.send(sender, "command.help.line.confirm")
         runtime.context.messages.send(sender, "command.help.line.residents")
         runtime.context.messages.send(sender, "command.help.line.recruit")
+        runtime.context.messages.send(sender, "command.help.line.border")
         return 1
     }
 }

@@ -1,0 +1,26 @@
+levels:
+  "1":
+    level: 1
+    radius: 24
+    building-limit: 6
+    resident-limit: 8
+  "2":
+    level: 2
+    radius: 32
+    building-limit: 10
+    resident-limit: 12
+  "3":
+    level: 3
+    radius: 40
+    building-limit: 14
+    resident-limit: 16
+  "4":
+    level: 4
+    radius: 48
+    building-limit: 18
+    resident-limit: 20
+  "5":
+    level: 5
+    radius: 56
+    building-limit: 22
+    resident-limit: 24

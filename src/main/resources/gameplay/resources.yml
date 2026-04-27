@@ -1,0 +1,28 @@
+resources:
+  wood:
+    display-name: 木材
+    category: BASIC
+  stone:
+    display-name: 石头
+    category: BASIC
+  ore:
+    display-name: 矿石
+    category: BASIC
+  food:
+    display-name: 粮食
+    category: BASIC
+  plank:
+    display-name: 木板
+    category: PROCESSED
+  brick:
+    display-name: 石材
+    category: PROCESSED
+  ingot:
+    display-name: 金属锭
+    category: PROCESSED
+  tech_point:
+    display-name: 科技点
+    category: SPECIAL
+  ration:
+    display-name: 居民口粮
+    category: SPECIAL
