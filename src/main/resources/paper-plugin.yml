@@ -1,0 +1,8 @@
+name: CubeXSLG
+version: '$version'
+
+main: io.github.adlamb.cubex.CubeXSLG
+api-version: '1.21.8'
+load: POSTWORLD
+
+authors: [ AdLamb ]
