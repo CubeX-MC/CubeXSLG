@@ -1,0 +1,17 @@
+mode: H2
+
+pool:
+  maximum-size: 8
+  minimum-idle: 1
+  connection-timeout-ms: 10000
+
+h2:
+  file: data/cubexslg
+
+mariadb:
+  host: 127.0.0.1
+  port: 3306
+  database: cubexslg
+  username: root
+  password: change-me
+  parameters: useUnicode=true&characterEncoding=utf8&useSsl=false

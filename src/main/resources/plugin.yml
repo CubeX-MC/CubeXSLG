@@ -1,0 +1,16 @@
+name: CubeXSLG
+version: "${version}"
+main: io.github.adlamb.cubex.CubeXSLG
+description: CubeX SLG base plugin scaffold
+api-version: "1.21.8"
+load: POSTWORLD
+folia-supported: true
+authors: [ AdLamb ]
+prefix: CubeXSLG
+permissions:
+  cubexslg.command:
+    description: Access to CubeXSLG root commands
+    default: op
+  cubexslg.command.wand:
+    description: Access to CubeXSLG building wand commands
+    default: op

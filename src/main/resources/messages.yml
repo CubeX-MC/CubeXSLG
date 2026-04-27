@@ -1,0 +1,24 @@
+prefix: "<gold><bold>CubeXSLG</bold></gold><gray> | </gray>"
+
+startup.enabled: "<prefix><green>基础骨架已加载。平台: <platform>，数据库: <database></green>"
+startup.disabled: "<prefix><yellow>基础骨架已卸载。</yellow>"
+startup.database.connected: "<prefix><gray>数据库连接已建立: <database></gray>"
+
+error.player-only: "<prefix><red>这个入口暂时只能由玩家执行。</red>"
+error.no-permission: "<prefix><red>你没有权限执行这个操作。</red>"
+error.command-failed: "<prefix><red>命令执行失败: <reason></red>"
+error.unknown-building: "<prefix><red>未知建筑类型: <building></red>"
+error.database: "<prefix><red>数据库初始化失败: <reason></red>"
+
+command.help.header: "<prefix><yellow>CubeXSLG Base 已启用，当前只提供骨架入口。</yellow>"
+command.help.line.create: "<gray>/slg create <name></gray> <dark_gray>-</dark_gray> <white>创建城镇占位入口</white>"
+command.help.line.wand: "<gray>/slg wand <building></gray> <dark_gray>-</dark_gray> <white>获取建筑核心工具占位物品</white>"
+command.help.line.resources: "<gray>/slg resources [stats|history]</gray> <dark_gray>-</dark_gray> <white>仓储系统占位入口</white>"
+command.help.line.repair: "<gray>/slg repair</gray> <dark_gray>-</dark_gray> <white>建筑修复占位入口</white>"
+command.help.line.confirm: "<gray>/slg confirm</gray> <dark_gray>-</dark_gray> <white>确认操作占位入口</white>"
+command.help.line.residents: "<gray>/slg residents</gray> <dark_gray>-</dark_gray> <white>居民系统占位入口</white>"
+command.help.line.recruit: "<gray>/slg recruit</gray> <dark_gray>-</dark_gray> <white>招募居民占位入口</white>"
+
+command.not-implemented: "<prefix><yellow><feature></yellow><gray> / </gray><white><action></white><gray> 入口已预留，尚未实现具体玩法。</gray>"
+command.wand.given: "<prefix><green>已发放 <building> 建筑核心。</green>"
+command.menu.opened: "<prefix><gray>已打开 <menu> 占位界面。</gray>"

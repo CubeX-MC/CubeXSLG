@@ -1,0 +1,8 @@
+locale: zh-CN
+debug: false
+
+menus:
+  placeholder-rows: 3
+
+startup:
+  validate-database: true
