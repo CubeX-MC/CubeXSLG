@@ -11,7 +11,7 @@ menus:
         - material: "PAPER"
           name: "<white> "
           lore:
-            - "<white>{line}"
+            - "<white><line>"
     buttons:
       - id: "storage"
         slot: 10
@@ -59,7 +59,7 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
     buttons:
       - id: "history"
         slot: 21
@@ -82,7 +82,7 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
     buttons:
       - id: "recruit"
         slot: 22
@@ -100,13 +100,13 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
     dynamic-lists:
       tech-list:
         slots: [10, 11, 12, 13, 14, 15]
         material: "LECTERN"
-        title: "<white>{tech_name}"
-        lore: ["<white>{tech_hint}"]
+        title: "<white><tech_name>"
+        lore: ["<white><tech_hint>"]
 
   production:
     title: "<white>生产系统"
@@ -118,10 +118,10 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
 
   building:
-    title: "<white>{building_name}"
+    title: "<white><building_name>"
     glass:
       material: "GRAY_STAINED_GLASS_PANE"
       name: "<white> "
@@ -130,7 +130,7 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
     buttons:
       - id: "upgrade"
         slot: 10
@@ -163,7 +163,7 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
 
   logistics:
     title: "<white>物流系统"
@@ -175,7 +175,7 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]
 
   rpg-link:
     title: "<white>RPG 联动"
@@ -187,4 +187,4 @@ menus:
       templates:
         - material: "PAPER"
           name: "<white> "
-          lore: ["<white>{line}"]
+          lore: ["<white><line>"]

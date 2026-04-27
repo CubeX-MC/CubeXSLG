@@ -18,6 +18,7 @@ import io.github.adlamb.cubex.registry.GameplayRegistry
 import io.github.adlamb.cubex.registry.ResourceCategory
 import io.github.adlamb.cubex.shared.MarkerKeys
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
@@ -116,7 +117,7 @@ class GameplayFacade(
 
         markInitialTech(town, player.uniqueId)
         placeTownHall(town, location)
-        messages.send(player, "town.create.success", "name" to town.name)
+        messages.send(player, "town.create.success", Placeholder.unparsed("name", town.name))
         return town
     }
 
@@ -134,11 +135,12 @@ class GameplayFacade(
             }
             spawnSquare(world, center, radius, dust)
         }
-        messages.send(player, "town.border.preview", "radius" to town.radius.toString())
+        messages.send(player, "town.border.preview", Placeholder.unparsed("radius", town.radius.toString()))
         return true
     }
 
-    private fun lineEntry(line: String): MenuBodyEntry = MenuBodyEntry(mapOf("line" to line))
+    private fun lineEntry(line: String): MenuBodyEntry =
+        MenuBodyEntry(mapOf("line" to Placeholder.unparsed("line", line)))
 
     fun openTownHall(player: Player) {
         val town = townOf(player)
@@ -233,8 +235,8 @@ class GameplayFacade(
                     "tech-list" to techNodes.take(6).map { tech ->
                         MenuDynamicEntry(
                             placeholders = mapOf(
-                                "tech_name" to tech.displayName,
-                                "tech_hint" to "点击研究",
+                                "tech_name" to Placeholder.unparsed("tech_name", tech.displayName),
+                                "tech_hint" to Placeholder.unparsed("tech_hint", "点击研究"),
                             ),
                             action = {
                                 research(it, tech.key)
@@ -277,7 +279,7 @@ class GameplayFacade(
             menuId = MenuId.BUILDING,
             context = MenuRenderContext(
                 placeholders = mapOf(
-                    "building_name" to (descriptor?.displayName ?: building.buildingKey),
+                    "building_name" to Placeholder.unparsed("building_name", descriptor?.displayName ?: building.buildingKey),
                 ),
                 bodyEntries = body,
                 buttons = mapOf(
@@ -329,12 +331,12 @@ class GameplayFacade(
     fun giveWand(player: Player, buildingKey: String): Boolean {
         val town = townOf(player) ?: return false
         if (!canUseBuilding(town.id, buildingKey)) {
-            messages.send(player, "building.locked", "building" to buildingKey)
+            messages.send(player, "building.locked", Placeholder.unparsed("building", buildingKey))
             return false
         }
         val descriptor = registry.findBuilding(buildingKey) ?: return false
         player.inventory.addItem(createWand(descriptor))
-        messages.send(player, "command.wand.given", "building" to descriptor.displayName)
+        messages.send(player, "command.wand.given", Placeholder.unparsed("building", descriptor.displayName))
         return true
     }
 
@@ -352,27 +354,27 @@ class GameplayFacade(
         val town = townOf(player) ?: return false
         val descriptor = registry.findBuilding(buildingKey) ?: return false
         if (!canUseBuilding(town.id, buildingKey)) {
-            messages.send(player, "building.locked", "building" to descriptor.displayName)
+            messages.send(player, "building.locked", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
 
         val base = block.getRelative(face).location.block.location
         if (!isWithinTown(town, base)) {
-            messages.send(player, "building.outside-town", "building" to descriptor.displayName)
+            messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
         if (!isFlatEnough(base, descriptor)) {
-            messages.send(player, "building.invalid-terrain", "building" to descriptor.displayName)
+            messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
         if (repository.buildingsByTown(town.id).count { !it.collapsed } >= town.buildingLimit) {
-            messages.send(player, "building.limit-reached", "limit" to town.buildingLimit.toString())
+            messages.send(player, "building.limit-reached", Placeholder.unparsed("limit", town.buildingLimit.toString()))
             return false
         }
 
         val cost = scaledCost(descriptor, 1)
         if (!hasResources(town.id, cost)) {
-            messages.send(player, "building.insufficient", "building" to descriptor.displayName)
+            messages.send(player, "building.insufficient", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
 
@@ -401,7 +403,7 @@ class GameplayFacade(
         cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
         }
-        messages.send(player, "building.built", "building" to descriptor.displayName)
+        messages.send(player, "building.built", Placeholder.unparsed("building", descriptor.displayName))
         return true
     }
 
@@ -427,14 +429,14 @@ class GameplayFacade(
         val food = (missing / 20L).coerceAtLeast(1L)
         val cost = mapOf("stone" to stone, "food" to food)
         if (!hasResources(town.id, cost)) {
-            messages.send(player, "building.insufficient", "building" to building.buildingKey)
+            messages.send(player, "building.insufficient", Placeholder.unparsed("building", building.buildingKey))
             return false
         }
         cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "修复建筑", building.buildingKey, player.uniqueId.toString())
         }
         repository.updateBuilding(building.copy(health = building.maxHealth, updatedAt = System.currentTimeMillis()))
-        messages.send(player, "building.repaired", "building" to building.buildingKey)
+        messages.send(player, "building.repaired", Placeholder.unparsed("building", building.buildingKey))
         return true
     }
 
@@ -447,7 +449,7 @@ class GameplayFacade(
         val descriptor = registry.findBuilding(building.buildingKey) ?: return false
         val cost = descriptor.buildCost.mapValues { (_, amount) -> ceil(amount * (1.0 + 0.65 * building.level)).toLong() }
         if (!hasResources(town.id, cost)) {
-            messages.send(player, "building.insufficient", "building" to descriptor.displayName)
+            messages.send(player, "building.insufficient", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
         cost.forEach { (resource, amount) ->
@@ -456,7 +458,7 @@ class GameplayFacade(
         val newLevel = building.level + 1
         val newMax = calculateMaxHealth(descriptor, newLevel)
         repository.updateBuilding(building.copy(level = newLevel, maxHealth = newMax, health = newMax, updatedAt = System.currentTimeMillis()))
-        messages.send(player, "building.upgraded", "building" to descriptor.displayName)
+        messages.send(player, "building.upgraded", Placeholder.unparsed("building", descriptor.displayName))
         return true
     }
 
@@ -531,7 +533,7 @@ class GameplayFacade(
                 val descriptor = registry.findBuilding(building.buildingKey) ?: return false
                 val destination = player.location.block.location
                 if (!isWithinTown(town, destination)) {
-                    messages.send(player, "building.outside-town", "building" to descriptor.displayName)
+                    messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
                     return false
                 }
                 removeBuildingProjection(building)
@@ -596,7 +598,7 @@ class GameplayFacade(
             updatedAt = System.currentTimeMillis(),
         )
         repository.saveResident(resident)
-        messages.send(player, "resident.recruited", "name" to resident.name)
+        messages.send(player, "resident.recruited", Placeholder.unparsed("name", resident.name))
         return true
     }
 
@@ -605,11 +607,16 @@ class GameplayFacade(
         val node = registry.tech(techKey) ?: return false
         val researched = repository.techProgress(town.id)
         if (researched.contains(node.key)) {
-            messages.send(player, "tech.already", "tech" to node.displayName)
+            messages.send(player, "tech.already", Placeholder.unparsed("tech", node.displayName))
             return false
         }
         if (town.level < node.townLevel) {
-            messages.send(player, "tech.town-level", "tech" to node.displayName, "level" to node.townLevel.toString())
+            messages.send(
+                player,
+                "tech.town-level",
+                Placeholder.unparsed("tech", node.displayName),
+                Placeholder.unparsed("level", node.townLevel.toString()),
+            )
             return false
         }
         if (node.prerequisites.any { !researched.contains(it.lowercase()) }) {
@@ -617,14 +624,14 @@ class GameplayFacade(
             return false
         }
         if (!hasResources(town.id, node.cost)) {
-            messages.send(player, "tech.insufficient", "tech" to node.displayName)
+            messages.send(player, "tech.insufficient", Placeholder.unparsed("tech", node.displayName))
             return false
         }
         node.cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "研究科技", node.displayName, player.uniqueId.toString())
         }
         repository.markTech(town.id, node.key, player.uniqueId)
-        messages.send(player, "tech.researched", "tech" to node.displayName)
+        messages.send(player, "tech.researched", Placeholder.unparsed("tech", node.displayName))
         return true
     }
 
@@ -634,9 +641,9 @@ class GameplayFacade(
             messages.send(
                 player,
                 "resource.history.line",
-                "delta" to if (entry.delta >= 0) "+${entry.delta}" else entry.delta.toString(),
-                "resource" to entry.resourceKey,
-                "source" to entry.source,
+                Placeholder.unparsed("delta", if (entry.delta >= 0) "+${entry.delta}" else entry.delta.toString()),
+                Placeholder.unparsed("resource", entry.resourceKey),
+                Placeholder.unparsed("source", entry.source),
             )
         }
     }
@@ -645,7 +652,12 @@ class GameplayFacade(
         val ledger = repository.ledger(townId, 100)
         val income = ledger.filter { it.delta > 0 }.sumOf { it.delta }
         val expense = ledger.filter { it.delta < 0 }.sumOf { -it.delta }
-        messages.send(player, "resource.stats.line", "income" to income.toString(), "expense" to expense.toString())
+        messages.send(
+            player,
+            "resource.stats.line",
+            Placeholder.unparsed("income", income.toString()),
+            Placeholder.unparsed("expense", expense.toString()),
+        )
     }
 
     private fun tickWorld() {

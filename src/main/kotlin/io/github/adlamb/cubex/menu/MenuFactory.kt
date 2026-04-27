@@ -11,6 +11,8 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -32,7 +34,9 @@ class MenuFactory(
         open(
             player = player,
             menuId = menuId,
-            context = MenuRenderContext(bodyEntries = listOf(MenuBodyEntry(mapOf("line" to line)))),
+            context = MenuRenderContext(
+                bodyEntries = listOf(MenuBodyEntry(mapOf("line" to Placeholder.unparsed("line", line)))),
+            ),
         )
     }
 
@@ -56,7 +60,7 @@ class MenuFactory(
         renderDynamicLists(holder, inventory, menu, context, menuKey)
 
         player.openInventory(inventory)
-        messages.send(player, "command.menu.opened", "menu" to plainText.serialize(title))
+        messages.send(player, "command.menu.opened", Placeholder.unparsed("menu", plainText.serialize(title)))
     }
 
     private fun resolveMenu(menuId: MenuId): MenuViewConfig {
@@ -146,7 +150,7 @@ class MenuFactory(
         }
     }
 
-    private fun createBodyItem(template: MenuBodyTemplate, placeholders: Map<String, String>, path: String): ItemStack {
+    private fun createBodyItem(template: MenuBodyTemplate, placeholders: Map<String, TagResolver.Single>, path: String): ItemStack {
         return createItem(
             template = MenuItemTemplate(template.material, template.name, template.lore),
             placeholders = placeholders,
@@ -157,7 +161,7 @@ class MenuFactory(
 
     private fun createItem(
         template: MenuItemTemplate,
-        placeholders: Map<String, String>,
+        placeholders: Map<String, TagResolver.Single>,
         path: String,
         fallback: Material = Material.GRAY_STAINED_GLASS_PANE,
     ): ItemStack {
@@ -174,11 +178,11 @@ class MenuFactory(
         }
     }
 
-    private fun render(template: String, placeholders: Map<String, String>): Component {
-        val resolved = placeholders.entries.fold(template) { acc, (key, value) ->
-            acc.replace("{$key}", value)
+    private fun render(template: String, placeholders: Map<String, TagResolver.Single>): Component {
+        if (placeholders.isEmpty()) {
+            return miniMessage.deserialize(template)
         }
-        return miniMessage.deserialize(resolved)
+        return miniMessage.deserialize(template, *placeholders.values.toTypedArray<TagResolver>())
     }
 
     private fun resolveMaterial(raw: String, path: String, fallback: Material): Material {

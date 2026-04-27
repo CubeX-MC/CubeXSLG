@@ -118,12 +118,12 @@ class ConfigService(private val plugin: JavaPlugin) {
                 val lore = when (val rawLore = node["lore"]) {
                     is List<*> -> rawLore.mapNotNull { it?.toString() }
                     is String -> listOf(rawLore)
-                    else -> listOf("<white>{line}")
+                    else -> emptyList()
                 }
                 MenuBodyTemplate(
                     material = material,
                     name = name,
-                    lore = lore.ifEmpty { listOf("<white>{line}") },
+                    lore = lore,
                 )
             }
             .ifEmpty { MenuBodyConfig().templates }

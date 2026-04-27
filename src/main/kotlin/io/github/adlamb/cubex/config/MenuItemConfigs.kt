@@ -27,7 +27,7 @@ data class MenuBodyConfig(
 data class MenuBodyTemplate(
     val material: String = "PAPER",
     val name: String = "<white> ",
-    val lore: List<String> = listOf("<white>{line}"),
+    val lore: List<String> = emptyList(),
 )
 
 data class MenuButtonTemplate(

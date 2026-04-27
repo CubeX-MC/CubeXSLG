@@ -5,6 +5,7 @@ import io.github.adlamb.cubex.bootstrap.PluginRuntime
 import io.github.adlamb.cubex.command.SlgCommandRegistrar
 import io.github.adlamb.cubex.platform.FoliaSupport
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.bukkit.plugin.java.JavaPlugin
 
 class CubeXSLG : JavaPlugin() {
@@ -23,8 +24,8 @@ class CubeXSLG : JavaPlugin() {
         initialized.context.messages.send(
             server.consoleSender,
             "startup.enabled",
-            "platform" to if (FoliaSupport.isFolia()) "Folia" else "Paper",
-            "database" to initialized.context.configs.database.mode.name,
+            Placeholder.unparsed("platform", if (FoliaSupport.isFolia()) "Folia" else "Paper"),
+            Placeholder.unparsed("database", initialized.context.configs.database.mode.name),
         )
     }
 
