@@ -124,17 +124,10 @@ class GameplayFacade(
     fun showBorder(player: Player): Boolean {
         val town = townOf(player) ?: return false
         val center = town.location(plugin) ?: return false
-        val world = center.world
         val radius = town.radius.toDouble()
         val dust = Particle.DustOptions(Color.YELLOW, 1.2f)
-        var remaining = 15
 
-        scheduler.region(center).runTimer(20, 20) {
-            if (remaining-- <= 0) {
-                return@runTimer
-            }
-            spawnSquare(world, center, radius, dust)
-        }
+        previewBorder(center, radius, dust, 15)
         messages.send(player, "town.border.preview", Placeholder.unparsed("radius", town.radius.toString()))
         return true
     }
@@ -363,6 +356,10 @@ class GameplayFacade(
             messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
+        if (!supportsSingleChunkFootprint(base, descriptor)) {
+            messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
+            return false
+        }
         if (!isFlatEnough(base, descriptor)) {
             messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
             return false
@@ -385,9 +382,9 @@ class GameplayFacade(
             townId = town.id,
             buildingKey = descriptor.key,
             world = base.world.name,
-            x = base.x.toDouble() + 0.5,
-            y = base.y.toDouble(),
-            z = base.z.toDouble() + 0.5,
+            x = base.x + 0.5,
+            y = base.y,
+            z = base.z + 0.5,
             yaw = player.location.yaw,
             pitch = player.location.pitch,
             level = 1,
@@ -398,8 +395,9 @@ class GameplayFacade(
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
         )
-        val blocks = placeTemplate(base, descriptor, town.id, buildingId)
+        val blocks = templateBlocks(base, descriptor, buildingId)
         repository.saveBuilding(state, blocks)
+        projectBuilding(state, blocks)
         cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
         }
@@ -520,7 +518,8 @@ class GameplayFacade(
         return when (pending.actionType) {
             "delete" -> {
                 val building = repository.buildingById(BuildingId(pending.payload)) ?: return false
-                removeBuildingProjection(building)
+                val blocks = repository.blocksForBuilding(building.id)
+                removeBuildingProjection(blocks, building.buildingKey)
                 repository.deleteBuilding(building.id)
                 repository.deletePendingAction(pending.id ?: return false)
                 dropCore(building)
@@ -536,15 +535,22 @@ class GameplayFacade(
                     messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
                     return false
                 }
-                removeBuildingProjection(building)
-                val blocks = placeTemplate(destination, descriptor, town.id, building.id)
-                repository.saveBuilding(building.copy(
+                if (!supportsSingleChunkFootprint(destination, descriptor) || !isFlatEnough(destination, descriptor)) {
+                    messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
+                    return false
+                }
+                val oldBlocks = repository.blocksForBuilding(building.id)
+                val blocks = templateBlocks(destination, descriptor, building.id)
+                val updated = building.copy(
                     world = destination.world.name,
-                    x = destination.x.toDouble() + 0.5,
-                    y = destination.y.toDouble(),
-                    z = destination.z.toDouble() + 0.5,
+                    x = destination.x + 0.5,
+                    y = destination.y,
+                    z = destination.z + 0.5,
                     updatedAt = System.currentTimeMillis(),
-                ), blocks)
+                )
+                removeBuildingProjection(oldBlocks, building.buildingKey)
+                repository.saveBuilding(updated, blocks)
+                projectBuilding(updated, blocks)
                 repository.deletePendingAction(pending.id ?: return false)
                 messages.send(player, "building.moved")
                 true
@@ -566,39 +572,46 @@ class GameplayFacade(
             return false
         }
 
+        val home = town.location(plugin) ?: return false
+        val spawn = home.clone().add(1.0, 0.0, 0.0)
+        val residentId = ResidentId(UUID.randomUUID().toString())
+        val createdAt = System.currentTimeMillis()
+        val strength = 1 + (0..3).random()
+        val agility = 1 + (0..3).random()
+        val intelligence = 1 + (0..3).random()
+        val endurance = 1 + (0..3).random()
+        val management = 1 + (0..3).random()
+
         repository.adjustBalance(town.id, "food", -50, "招募居民", "居民系统", player.uniqueId.toString())
-        val spawn = town.location(plugin) ?: return false
-        val villager = spawn.world.spawn(spawn.add(1.0, 0.0, 0.0), Villager::class.java) { entity ->
-            entity.customName(Component.text("居民"))
-            entity.isCustomNameVisible = true
-            entity.isPersistent = true
-            entity.removeWhenFarAway = false
+        scheduler.executeRegion(spawn) {
+            val villager = spawn.world.spawn(spawn, Villager::class.java)
+            val resident = ResidentState(
+                id = residentId,
+                townId = town.id,
+                uuid = villager.uniqueId,
+                name = "居民-${villager.uniqueId.toString().takeLast(4)}",
+                world = villager.world.name,
+                x = villager.location.x,
+                y = villager.location.y,
+                z = villager.location.z,
+                homeX = home.x,
+                homeY = home.y,
+                homeZ = home.z,
+                jobBuildingId = null,
+                jobRole = null,
+                strength = strength,
+                agility = agility,
+                intelligence = intelligence,
+                endurance = endurance,
+                management = management,
+                active = true,
+                createdAt = createdAt,
+                updatedAt = createdAt,
+            )
+            refreshResidentEntity(villager, resident, home, isDaytime = true)
+            repository.saveResident(resident)
         }
-        val resident = ResidentState(
-            id = ResidentId(UUID.randomUUID().toString()),
-            townId = town.id,
-            uuid = villager.uniqueId,
-            name = "居民-${villager.uniqueId.toString().takeLast(4)}",
-            world = villager.world.name,
-            x = villager.location.x,
-            y = villager.location.y,
-            z = villager.location.z,
-            homeX = spawn.x,
-            homeY = spawn.y,
-            homeZ = spawn.z,
-            jobBuildingId = null,
-            jobRole = null,
-            strength = 1 + (0..3).random(),
-            agility = 1 + (0..3).random(),
-            intelligence = 1 + (0..3).random(),
-            endurance = 1 + (0..3).random(),
-            management = 1 + (0..3).random(),
-            active = true,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-        )
-        repository.saveResident(resident)
-        messages.send(player, "resident.recruited", Placeholder.unparsed("name", resident.name))
+        messages.send(player, "resident.recruited", Placeholder.unparsed("name", "居民"))
         return true
     }
 
@@ -686,36 +699,26 @@ class GameplayFacade(
                     }
                 }
             }
-            refreshResidents(town)
+            refreshResidents(town, town.location(plugin)?.world?.time?.let { it in 0..12000L } ?: true)
             expirePendingActions(town)
         }
     }
 
-    private fun refreshResidents(town: TownState) {
+    private fun refreshResidents(town: TownState, isDaytime: Boolean) {
         repository.residentsByTown(town.id).forEach { resident ->
             val world = plugin.server.getWorld(resident.world) ?: return@forEach
-            val entity = world.entities.filterIsInstance<Villager>().firstOrNull { it.uniqueId == resident.uuid }
-                ?: world.spawn(Location(world, resident.x, resident.y, resident.z), Villager::class.java)
-            entity.customName(Component.text(resident.name))
-            entity.isCustomNameVisible = true
-            entity.isPersistent = true
-            entity.removeWhenFarAway = false
             val home = Location(world, resident.homeX, resident.homeY, resident.homeZ)
-            val target = home
-            if (world.time in 0..12000L) {
-                if (resident.jobBuildingId != null) {
-                    val building = repository.buildingById(BuildingId(resident.jobBuildingId))
-                    if (building != null) {
-                        val destination = Location(world, building.x, building.y, building.z)
-                        if (entity.location.distanceSquared(destination) > 16.0) {
-                            entity.teleport(destination)
-                        }
+            scheduler.executeRegion(home) {
+                val existing = world.getEntity(resident.uuid) as? Villager
+                if (existing != null) {
+                    scheduler.executeEntity(existing) {
+                        refreshResidentEntity(existing, resident, home, isDaytime)
                     }
-                } else if (entity.location.distanceSquared(target) > 16.0) {
-                    entity.teleport(target)
+                    return@executeRegion
                 }
-            } else if (entity.location.distanceSquared(target) > 16.0) {
-                entity.teleport(target)
+
+                val spawned = world.spawn(Location(world, resident.x, resident.y, resident.z), Villager::class.java)
+                refreshResidentEntity(spawned, resident, home, isDaytime)
             }
         }
     }
@@ -736,30 +739,20 @@ class GameplayFacade(
                 placeTownHall(town, townLocation)
             }
             repository.buildingsByTown(town.id).forEach { building ->
-                val descriptor = registry.findBuilding(building.buildingKey)
                 val blocks = repository.blocksForBuilding(building.id)
-                if (descriptor != null && blocks.isNotEmpty()) {
-                    projectBuilding(world, building, blocks)
+                if (blocks.isNotEmpty()) {
+                    projectBuilding(building, blocks)
                 }
             }
         }
     }
 
     private fun placeTownHall(town: TownState, location: Location) {
-        val world = location.world
-        val core = location.block
-        core.type = Material.BARREL
-        val state = core.state as? TileState ?: return
-        state.persistentDataContainer.set(keys.townId, PersistentDataType.STRING, town.id.value)
-        state.persistentDataContainer.set(keys.buildingId, PersistentDataType.STRING, town.id.value)
-        state.persistentDataContainer.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
-        state.update(true, false)
-
         val building = BuildingState(
             id = BuildingId(town.id.value),
             townId = town.id,
             buildingKey = TOWN_HALL_KEY,
-            world = world.name,
+            world = location.world.name,
             x = location.x,
             y = location.y,
             z = location.z,
@@ -774,14 +767,25 @@ class GameplayFacade(
             updatedAt = town.updatedAt,
         )
         val blocks = listOf(
-            BuildingBlockState(BuildingId(town.id.value), world.name, core.x, core.y, core.z, Material.BARREL.name),
+            BuildingBlockState(BuildingId(town.id.value), location.world.name, location.blockX, location.blockY, location.blockZ, Material.BARREL.name),
         )
         repository.saveBuilding(building, blocks)
+        projectBuilding(building, blocks)
     }
 
-    private fun projectBuilding(world: org.bukkit.World, building: BuildingState, blocks: List<BuildingBlockState>) {
-        val core = blocks.firstOrNull { it.material.equals(Material.BARREL.name, ignoreCase = true) }
+    private fun projectBuilding(building: BuildingState, blocks: List<BuildingBlockState>) {
+        val anchor = projectionAnchor(blocks) ?: return
+        if (!supportsSingleChunkProjection(blocks, building.buildingKey)) {
+            return
+        }
+        scheduler.executeRegion(anchor) {
+            projectBuildingNow(building, blocks)
+        }
+    }
+
+    private fun projectBuildingNow(building: BuildingState, blocks: List<BuildingBlockState>) {
         blocks.forEach { blockState ->
+            val world = plugin.server.getWorld(blockState.world) ?: return@forEach
             val block = world.getBlockAt(blockState.x, blockState.y, blockState.z)
             block.type = Material.valueOf(blockState.material)
             if (block.type == Material.BARREL) {
@@ -794,35 +798,39 @@ class GameplayFacade(
         }
     }
 
-    private fun placeTemplate(base: Location, descriptor: BuildingDescriptor, townId: TownId, buildingId: BuildingId): List<BuildingBlockState> {
-        val blocks = mutableListOf<BuildingBlockState>()
-        descriptor.footprint.forEach { spec ->
-            val block = base.world.getBlockAt(base.blockX + spec.dx, base.blockY + spec.dy, base.blockZ + spec.dz)
-            block.type = spec.material
-            if (spec.material == Material.BARREL) {
-                val state = block.state as? TileState
-                state?.persistentDataContainer?.set(keys.townId, PersistentDataType.STRING, townId.value)
-                state?.persistentDataContainer?.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
-                state?.persistentDataContainer?.set(keys.buildingType, PersistentDataType.STRING, descriptor.key)
-                state?.update(true, false)
-            }
-            blocks += BuildingBlockState(buildingId, base.world.name, block.x, block.y, block.z, spec.material.name)
+    private fun templateBlocks(base: Location, descriptor: BuildingDescriptor, buildingId: BuildingId): List<BuildingBlockState> {
+        return descriptor.footprint.map { spec ->
+            BuildingBlockState(
+                buildingId = buildingId,
+                world = base.world.name,
+                x = base.blockX + spec.dx,
+                y = base.blockY + spec.dy,
+                z = base.blockZ + spec.dz,
+                material = spec.material.name,
+            )
         }
-        return blocks
     }
 
-    private fun removeBuildingProjection(building: BuildingState) {
-        repository.blocksForBuilding(building.id).forEach { blockState ->
-            val world = plugin.server.getWorld(blockState.world) ?: return@forEach
-            val block = world.getBlockAt(blockState.x, blockState.y, blockState.z)
-            block.type = Material.AIR
+    private fun removeBuildingProjection(blocks: List<BuildingBlockState>, buildingKey: String) {
+        val anchor = projectionAnchor(blocks) ?: return
+        if (!supportsSingleChunkProjection(blocks, buildingKey)) {
+            return
+        }
+        scheduler.executeRegion(anchor) {
+            blocks.forEach { blockState ->
+                val world = plugin.server.getWorld(blockState.world) ?: return@forEach
+                val block = world.getBlockAt(blockState.x, blockState.y, blockState.z)
+                block.type = Material.AIR
+            }
         }
     }
 
     private fun dropCore(building: BuildingState) {
         registry.findBuilding(building.buildingKey)?.let { descriptor ->
-            val world = plugin.server.getWorld(building.world) ?: return@let
-            world.dropItemNaturally(Location(world, building.x, building.y, building.z), createWand(descriptor))
+            val dropLocation = building.location(plugin) ?: return@let
+            scheduler.executeRegion(dropLocation) {
+                dropLocation.world.dropItemNaturally(dropLocation, createWand(descriptor))
+            }
         }
     }
 
@@ -863,12 +871,28 @@ class GameplayFacade(
         }
     }
 
+    private fun previewBorder(center: Location, radius: Double, dust: Particle.DustOptions, remaining: Int) {
+        if (remaining <= 0) {
+            return
+        }
+        spawnSquare(center, radius, dust)
+        scheduler.region(center).runLater(20) {
+            previewBorder(center, radius, dust, remaining - 1)
+        }
+    }
+
     private fun TownState.location(plugin: JavaPlugin): Location? {
         val serverWorld = plugin.server.getWorld(world) ?: return null
         return Location(serverWorld, x, y, z, yaw, pitch)
     }
 
-    private fun spawnSquare(world: org.bukkit.World, center: Location, radius: Double, dust: Particle.DustOptions) {
+    private fun BuildingState.location(plugin: JavaPlugin): Location? {
+        val serverWorld = plugin.server.getWorld(world) ?: return null
+        return Location(serverWorld, x, y, z, yaw, pitch)
+    }
+
+    private fun spawnSquare(center: Location, radius: Double, dust: Particle.DustOptions) {
+        val world = center.world
         val minX = center.x - radius
         val maxX = center.x + radius
         val minZ = center.z - radius
@@ -881,8 +905,69 @@ class GameplayFacade(
             Location(world, minX, y, maxZ),
         )
         points.forEach { point ->
-            world.spawnParticle(Particle.DUST, point, 25, 0.15, 0.15, 0.15, 0.0, dust)
+            scheduler.executeRegion(point) {
+                point.world.spawnParticle(Particle.DUST, point, 25, 0.15, 0.15, 0.15, 0.0, dust)
+            }
         }
+    }
+
+    private fun refreshResidentEntity(entity: Villager, resident: ResidentState, home: Location, isDaytime: Boolean) {
+        entity.customName(Component.text(resident.name))
+        entity.isCustomNameVisible = true
+        entity.isPersistent = true
+        entity.removeWhenFarAway = false
+
+        val target = residentTarget(resident, home, isDaytime)
+        if (shouldTeleport(entity, target)) {
+            entity.teleportAsync(target)
+        }
+    }
+
+    private fun residentTarget(resident: ResidentState, home: Location, isDaytime: Boolean): Location {
+        if (!isDaytime || resident.jobBuildingId == null) {
+            return home
+        }
+
+        val building = repository.buildingById(BuildingId(resident.jobBuildingId)) ?: return home
+        val world = plugin.server.getWorld(building.world) ?: return home
+        return Location(world, building.x, building.y, building.z)
+    }
+
+    private fun shouldTeleport(entity: Villager, target: Location): Boolean {
+        if (entity.world.uid != target.world.uid) {
+            return true
+        }
+        return entity.location.distanceSquared(target) > 16.0
+    }
+
+    private fun supportsSingleChunkFootprint(base: Location, descriptor: BuildingDescriptor): Boolean {
+        val chunks = descriptor.footprint.map { spec ->
+            ((base.blockX + spec.dx) shr 4) to ((base.blockZ + spec.dz) shr 4)
+        }.toSet()
+        if (chunks.size <= 1) {
+            return true
+        }
+
+        plugin.logger.warning("CubeXSLG refuses to project building ${descriptor.key}: footprint crosses multiple chunks, which is not supported safely on Folia.")
+        return false
+    }
+
+    private fun supportsSingleChunkProjection(blocks: List<BuildingBlockState>, buildingKey: String): Boolean {
+        val chunks = blocks.map { block ->
+            Triple(block.world, block.x shr 4, block.z shr 4)
+        }.toSet()
+        if (chunks.size <= 1) {
+            return true
+        }
+
+        plugin.logger.warning("CubeXSLG refuses to project building $buildingKey: stored projection crosses multiple chunks, which is not supported safely on Folia.")
+        return false
+    }
+
+    private fun projectionAnchor(blocks: List<BuildingBlockState>): Location? {
+        val block = blocks.firstOrNull() ?: return null
+        val world = plugin.server.getWorld(block.world) ?: return null
+        return Location(world, block.x.toDouble(), block.y.toDouble(), block.z.toDouble())
     }
 
     private fun markInitialTech(town: TownState, owner: UUID) {

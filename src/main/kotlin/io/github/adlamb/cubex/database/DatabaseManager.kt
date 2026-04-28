@@ -4,7 +4,6 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.github.adlamb.cubex.config.DatabaseConfig
 import io.github.adlamb.cubex.config.DatabaseMode
-import io.github.adlamb.cubex.coroutine.PluginCoroutines
 import org.bukkit.plugin.java.JavaPlugin
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -17,8 +16,7 @@ import java.io.File
 class DatabaseManager(
     private val plugin: JavaPlugin,
     private val config: DatabaseConfig,
-    private val coroutines: PluginCoroutines,
-) : TransactionRunner {
+) {
     private var dataSource: HikariDataSource? = null
     private var database: Database? = null
 
@@ -78,15 +76,6 @@ class DatabaseManager(
 
         dataSource = hikariDataSource
         database = exposed
-    }
-
-    override suspend fun <T> inTransaction(block: () -> T): T {
-        val db = requireNotNull(database) { "Database has not been initialized." }
-        return coroutines.io {
-            transaction(db) {
-                block()
-            }
-        }
     }
 
     fun close() {

@@ -2,7 +2,6 @@ package io.github.adlamb.cubex.bootstrap
 
 import io.github.adlamb.cubex.command.CommandContributor
 import io.github.adlamb.cubex.config.PluginConfigs
-import io.github.adlamb.cubex.coroutine.PluginCoroutines
 import io.github.adlamb.cubex.database.DatabaseManager
 import io.github.adlamb.cubex.gameplay.GameplayFacade
 import io.github.adlamb.cubex.menu.MenuFactory
@@ -19,7 +18,6 @@ data class PluginContext(
     val plugin: JavaPlugin,
     val configs: PluginConfigs,
     val messages: MessageService,
-    val coroutines: PluginCoroutines,
     val scheduler: SchedulerFacade,
     val database: DatabaseManager,
     val registry: GameplayRegistry,
@@ -42,6 +40,5 @@ data class PluginRuntime(
     fun shutdown() {
         modules.asReversed().forEach(FeatureModule::onDisable)
         context.database.close()
-        context.coroutines.close()
     }
 }

@@ -14,6 +14,12 @@ interface TickScheduler {
 }
 
 interface SchedulerFacade {
+    fun ownsGlobal(): Boolean
+
+    fun owns(location: Location): Boolean
+
+    fun owns(entity: Entity): Boolean
+
     fun global(): TickScheduler
 
     fun region(location: Location): TickScheduler
@@ -21,9 +27,39 @@ interface SchedulerFacade {
     fun entity(entity: Entity): TickScheduler
 
     fun async(): TickScheduler
+
+    fun executeGlobal(task: () -> Unit) {
+        if (ownsGlobal()) {
+            task()
+            return
+        }
+        global().execute(task)
+    }
+
+    fun executeRegion(location: Location, task: () -> Unit) {
+        if (owns(location)) {
+            task()
+            return
+        }
+        region(location).execute(task)
+    }
+
+    fun executeEntity(entity: Entity, task: () -> Unit) {
+        if (owns(entity)) {
+            task()
+            return
+        }
+        this.entity(entity).execute(task)
+    }
 }
 
 class PaperSchedulerFacade(private val plugin: JavaPlugin) : SchedulerFacade {
+    override fun ownsGlobal(): Boolean = plugin.server.isGlobalTickThread
+
+    override fun owns(location: Location): Boolean = plugin.server.isOwnedByCurrentRegion(location)
+
+    override fun owns(entity: Entity): Boolean = plugin.server.isOwnedByCurrentRegion(entity)
+
     override fun global(): TickScheduler = object : TickScheduler {
         override fun execute(task: () -> Unit) {
             plugin.server.globalRegionScheduler.execute(plugin, task)

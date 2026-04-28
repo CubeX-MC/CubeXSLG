@@ -1,7 +1,6 @@
 package io.github.adlamb.cubex.bootstrap
 
 import io.github.adlamb.cubex.config.ConfigService
-import io.github.adlamb.cubex.coroutine.DefaultPluginCoroutines
 import io.github.adlamb.cubex.database.DatabaseManager
 import io.github.adlamb.cubex.gameplay.GameplayFacade
 import io.github.adlamb.cubex.feature.building.BuildingModule
@@ -25,9 +24,8 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
     fun initialize(): PluginRuntime {
         val configs = ConfigService(plugin).load()
         val messages = MessageService(plugin, configs.locale)
-        val coroutines = DefaultPluginCoroutines(plugin)
         val scheduler = PaperSchedulerFacade(plugin)
-        val database = DatabaseManager(plugin, configs.database, coroutines)
+        val database = DatabaseManager(plugin, configs.database)
         val registry = GameplayRegistry.load(plugin)
         val keys = MarkerKeys(plugin)
         val menuFactory = MenuFactory(plugin, messages, configs, configs.menuItems)
@@ -52,7 +50,6 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
             plugin = plugin,
             configs = configs,
             messages = messages,
-            coroutines = coroutines,
             scheduler = scheduler,
             database = database,
             registry = registry,
