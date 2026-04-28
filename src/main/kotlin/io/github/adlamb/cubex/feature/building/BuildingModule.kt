@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
+import io.github.adlamb.cubex.command.suggestMatching
 import io.github.adlamb.cubex.module.FeatureModule
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
@@ -59,10 +60,13 @@ class BuildingCommands(
         root.then(
             Commands.literal("wand")
                 .then(
-                    Commands.argument("building", StringArgumentType.word()).executes { command ->
-                        val player = command.source.sender as? Player ?: return@executes 0
-                        if (context.gameplay.giveWand(player, StringArgumentType.getString(command, "building"))) 1 else 0
-                    },
+                    Commands.argument("building", StringArgumentType.word())
+                        .suggests { _, builder ->
+                            suggestMatching(builder, context.registry.buildings.keys)
+                        }.executes { command ->
+                            val player = command.source.sender as? Player ?: return@executes 0
+                            if (context.gameplay.giveWand(player, StringArgumentType.getString(command, "building"))) 1 else 0
+                        },
                 ),
         )
         root.then(

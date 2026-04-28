@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
+import io.github.adlamb.cubex.command.suggestMatching
 import io.github.adlamb.cubex.module.FeatureModule
 import io.github.adlamb.cubex.shared.MarkerKeys
 import io.papermc.paper.command.brigadier.CommandSourceStack
@@ -47,6 +48,13 @@ class TownCommands(
             Commands.literal("create")
                 .then(
                     Commands.argument("name", StringArgumentType.greedyString())
+                        .suggests { command, builder ->
+                            val player = command.source.sender as? Player ?: return@suggests builder.buildFuture()
+                            if (context.gameplay.townOf(player) != null) {
+                                return@suggests builder.buildFuture()
+                            }
+                            suggestMatching(builder, listOf("${player.name}的城镇"))
+                        }
                         .executes { command ->
                             val sender = command.source.sender as? Player ?: return@executes 0
                             context.gameplay.createTown(sender, StringArgumentType.getString(command, "name"))?.let {
