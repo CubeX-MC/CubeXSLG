@@ -8,12 +8,15 @@ import io.github.adlamb.cubex.command.suggestMatching
 import io.github.adlamb.cubex.module.FeatureModule
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
+import org.bukkit.Material
 import org.bukkit.block.BlockFace
 import org.bukkit.block.TileState
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
+import org.bukkit.event.block.BlockExplodeEvent
+import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.persistence.PersistentDataType
 
@@ -49,6 +52,27 @@ class BuildingListener(
             context.gameplay.openTownHall(event.player)
         } else {
             context.gameplay.openBuildingMenu(event.player, buildingId)
+        }
+    }
+
+    @EventHandler
+    fun onEntityExplode(event: EntityExplodeEvent) {
+        protectCores(event.blockList())
+    }
+
+    @EventHandler
+    fun onBlockExplode(event: BlockExplodeEvent) {
+        protectCores(event.blockList())
+    }
+
+    private fun protectCores(blocks: MutableList<org.bukkit.block.Block>) {
+        blocks.removeAll { block ->
+            val state = block.state as? TileState ?: return@removeAll false
+            val pdc = state.persistentDataContainer
+            val buildingId = pdc.get(context.keys.buildingId, PersistentDataType.STRING) ?: return@removeAll false
+            
+            // 只保护核心方块（木桶）
+            block.type == Material.BARREL && buildingId.isNotEmpty()
         }
     }
 }
