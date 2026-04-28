@@ -3,6 +3,7 @@ package io.github.adlamb.cubex.bootstrap
 import io.github.adlamb.cubex.config.ConfigService
 import io.github.adlamb.cubex.database.DatabaseManager
 import io.github.adlamb.cubex.gameplay.GameplayFacade
+import io.github.adlamb.cubex.feature.admin.AdminModule
 import io.github.adlamb.cubex.feature.building.BuildingModule
 import io.github.adlamb.cubex.feature.combat.CombatModule
 import io.github.adlamb.cubex.feature.logistics.LogisticsModule
@@ -60,6 +61,7 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
         )
 
         val modules = listOf(
+            AdminModule(context),
             TownModule(context),
             ResourceModule(context),
             ProductionModule(context),

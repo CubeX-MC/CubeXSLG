@@ -76,6 +76,13 @@ class GameplayFacade(
             return null
         }
 
+        // 验证城镇名：只允许英文字母、数字、下划线
+        val trimmedName = name.trim()
+        if (trimmedName.isNotEmpty() && !trimmedName.matches(Regex("[a-zA-Z0-9_]+"))) {
+            messages.send(player, "town.create.invalid-name")
+            return null
+        }
+
         val location = player.location.block.location.add(0.5, 0.0, 0.5)
         val townLevel = registry.levelFor(1)
         val overlap = repository.towns().any { existing ->
@@ -89,7 +96,7 @@ class GameplayFacade(
         val town = TownState(
             id = TownId(UUID.randomUUID().toString()),
             ownerUuid = player.uniqueId,
-            name = name.trim().ifBlank { "${player.name}的城镇" },
+            name = trimmedName.ifBlank { "Town_${player.name}" },
             world = location.world.name,
             x = location.x,
             y = location.y,
@@ -974,5 +981,73 @@ class GameplayFacade(
         listOf("base_collect", "base_agriculture", "wood_defense").forEach {
             repository.markTech(town.id, it, owner)
         }
+    }
+
+    // ========== Admin Methods ==========
+
+    fun getAllTownNames(): List<String> {
+        return repository.towns().map { it.name }
+    }
+
+    fun getTownByName(name: String): TownState? {
+        return repository.towns().find { it.name.equals(name, ignoreCase = true) }
+    }
+
+    fun deleteTownByName(name: String): Boolean {
+        val town = getTownByName(name) ?: return false
+        deleteTown(town.id)
+        return true
+    }
+
+    fun deleteTown(townId: TownId) {
+        val buildings = repository.buildingsByTown(townId)
+        buildings.forEach { building ->
+            val blocks = repository.blocksForBuilding(building.id)
+            removeBuildingProjection(blocks, building.buildingKey)
+            repository.deleteBuilding(building.id)
+        }
+    }
+
+    fun transferTown(townName: String, newOwnerUuid: UUID): Boolean {
+        val town = getTownByName(townName) ?: return false
+        val updated = town.copy(ownerUuid = newOwnerUuid, updatedAt = System.currentTimeMillis())
+        repository.saveTown(updated)
+        return true
+    }
+
+    fun setTownLevel(townName: String, level: Int): Boolean {
+        val town = getTownByName(townName) ?: return false
+        val levelDef = registry.levelFor(level)
+        val updated = town.copy(
+            level = level,
+            radius = levelDef.radius,
+            buildingLimit = levelDef.buildingLimit,
+            residentLimit = levelDef.residentLimit,
+            updatedAt = System.currentTimeMillis(),
+        )
+        repository.saveTown(updated)
+        return true
+    }
+
+    fun addResourceToTown(townName: String, resource: String, amount: Long): Boolean {
+        val town = getTownByName(townName) ?: return false
+        repository.adjustBalance(town.id, resource, amount, "管理员添加", "Admin", null)
+        return true
+    }
+
+    fun modifyResidentAttribute(residentId: String, attribute: io.github.adlamb.cubex.registry.ResidentAttribute, value: Int): Boolean {
+        val resident = repository.towns().flatMap { town -> 
+            repository.residentsByTown(town.id) 
+        }.find { it.id.value == residentId } ?: return false
+
+        val updated = when (attribute) {
+            io.github.adlamb.cubex.registry.ResidentAttribute.STRENGTH -> resident.copy(strength = value)
+            io.github.adlamb.cubex.registry.ResidentAttribute.AGILITY -> resident.copy(agility = value)
+            io.github.adlamb.cubex.registry.ResidentAttribute.INTELLIGENCE -> resident.copy(intelligence = value)
+            io.github.adlamb.cubex.registry.ResidentAttribute.ENDURANCE -> resident.copy(endurance = value)
+            io.github.adlamb.cubex.registry.ResidentAttribute.MANAGEMENT -> resident.copy(management = value)
+        }
+        repository.saveResident(updated)
+        return true
     }
 }

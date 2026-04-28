@@ -16,6 +16,7 @@ error:
 town:
   create:
     exists: "<prefix><red>你已经拥有一个城镇。</red>"
+    invalid-name: "<prefix><red>城镇名只能包含英文字母、数字和下划线。</red>"
     overlap: "<prefix><red>当前位置与其他城镇冲突。</red>"
     success: "<prefix><green>城镇 <name> 创建成功。</green>"
   border:
@@ -71,3 +72,60 @@ command:
     given: "<prefix><green>已发放 <building> 建筑核心。</green>"
   menu:
     opened: "<prefix><gray>已打开 <menu> 界面。</gray>"
+
+admin:
+  town:
+    list:
+      header: "<prefix><gold>=== 城镇列表 (共 <count> 个) ===</gold>"
+      empty: "<prefix><gray>当前没有城镇。</gray>"
+      entry: "  <white><name></white> <dark_gray>|</dark_gray> 主人: <owner> <dark_gray>|</dark_gray> 等级: <level> <dark_gray>|</dark_gray> 建筑: <buildings>"
+    info:
+      header: "<prefix><gold>=== 城镇信息: <name> ===</gold>"
+      owner: "  <gray>主人:</gray> <white><owner></white>"
+      level: "  <gray>等级:</gray> <white><level></white>"
+      location: "  <gray>位置:</gray> <white><world> (<x>, <y>, <z>)</white>"
+      radius: "  <gray>半径:</gray> <white><radius></white>"
+      buildings: "  <gray>建筑:</gray> <white><count>/<limit></white>"
+      residents: "  <gray>居民:</gray> <white><count>/<limit></white>"
+      resources_header: "  <gray>资源:</gray>"
+      resource: "    <white><resource>:</white> <yellow><amount></yellow>"
+    not_found: "<prefix><red>未找到城镇: <name></red>"
+    deleted: "<prefix><green>城镇 <name> 已删除。</green>"
+    transferred: "<prefix><green>城镇 <name> 已转让给 <owner>。</green>"
+    level_set: "<prefix><green>城镇 <name> 等级已设置为 <level>。</green>"
+  building:
+    list:
+      header: "<prefix><gold>=== 建筑列表 (共 <count> 个) ===</gold>"
+      empty: "<prefix><gray>当前没有建筑。</gray>"
+      entry: "  <gray>[<id>]</gray> <white><name></white> <dark_gray>|</dark_gray> 等级: <level> <dark_gray>|</dark_gray> 生命: <health>"
+    not_found: "<prefix><red>未找到建筑: <id></red>"
+    deleted: "<prefix><green>建筑 <id> 已删除。</green>"
+    level_set: "<prefix><green>建筑 <id> 等级已设置为 <level>。</green>"
+    invalid_type: "<prefix><red>无效的建筑类型。</red>"
+  resident:
+    list:
+      header: "<prefix><gold>=== 居民列表 (共 <count> 个) ===</gold>"
+      empty: "<prefix><gray>当前没有居民。</gray>"
+      entry: "  <gray>[<id>]</gray> <white><name></white> <dark_gray>|</dark_gray> 力:<str> 敏:<agi> 智:<int>"
+    not_found: "<prefix><red>未找到居民: <id></red>"
+    attr_added: "<prefix><green>居民 <id> 的 <attr> 已设置为 <value>。</green>"
+    invalid_attr: "<prefix><red>无效的属性: <attr></red>"
+  tech:
+    granted: "<prefix><green>已授予 <town> 科技 <tech>。</green>"
+    reset: "<prefix><green><name> 的科技树已重置。</green>"
+    not_found: "<prefix><red>未找到科技: <key></red>"
+  resource:
+    added: "<prefix><green>已向 <town> 添加 <amount> <resource>。</green>"
+  player:
+    not_found: "<prefix><red>未找到玩家: <name></red>"
+    no_town: "<prefix><gray><name> 没有城镇。</gray>"
+    town_info: "<prefix><gray><name> 的城镇: <town> (等级 <level>)</gray>"
+    reset: "<prefix><green><name> 的SLG数据已重置。</green>"
+  data:
+    reloading: "<prefix><gray>正在重载配置...</gray>"
+    reloaded: "<prefix><green>配置已重载。</green>"
+  stats:
+    header: "<prefix><gold>=== 服务器统计 ===</gold>"
+    towns: "  <gray>城镇数量:</gray> <white><count></white>"
+    buildings: "  <gray>建筑数量:</gray> <white><count></white>"
+    residents: "  <gray>居民数量:</gray> <white><count></white>"
