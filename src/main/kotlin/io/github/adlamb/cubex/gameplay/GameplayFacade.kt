@@ -680,6 +680,15 @@ class GameplayFacade(
         )
     }
 
+    fun handleResidentDeath(uuid: UUID): Boolean {
+        val resident = repository.residentByUuid(uuid) ?: return false
+        repository.deleteResidentByUuid(uuid)
+        val town = repository.townById(resident.townId) ?: return true
+        val owner = plugin.server.getPlayer(town.ownerUuid) ?: return true
+        messages.send(owner, "resident.died", Placeholder.unparsed("name", resident.name))
+        return true
+    }
+
     private fun tickWorld() {
         repository.towns().forEach { town ->
             val researched = repository.techProgress(town.id)
@@ -725,7 +734,16 @@ class GameplayFacade(
                 }
 
                 val spawned = world.spawn(Location(world, resident.x, resident.y, resident.z), Villager::class.java)
-                refreshResidentEntity(spawned, resident, home, isDaytime)
+                val updatedResident = resident.copy(
+                    uuid = spawned.uniqueId,
+                    world = spawned.world.name,
+                    x = spawned.location.x,
+                    y = spawned.location.y,
+                    z = spawned.location.z,
+                    updatedAt = System.currentTimeMillis(),
+                )
+                refreshResidentEntity(spawned, updatedResident, home, isDaytime)
+                repository.saveResident(updatedResident)
             }
         }
     }

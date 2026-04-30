@@ -242,6 +242,10 @@ class GameplayRepository {
         ResidentsTable.selectAll().firstOrNull { it[ResidentsTable.uuid] == uuid.toString() }?.toResidentState()
     }
 
+    fun deleteResidentByUuid(uuid: UUID) = transaction {
+        ResidentsTable.deleteWhere { ResidentsTable.uuid eq uuid.toString() }
+    }
+
     fun saveResident(state: ResidentState) = transaction {
         ResidentsTable.deleteWhere { ResidentsTable.id eq state.id.value }
         ResidentsTable.insert {

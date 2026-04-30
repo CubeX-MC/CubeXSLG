@@ -11,9 +11,12 @@ import org.bukkit.entity.Villager
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityBreedEvent
+import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 
-class ResidentListener : Listener {
+class ResidentListener(
+    private val context: PluginContext,
+) : Listener {
     @EventHandler
     fun onInteractEntity(event: PlayerInteractEntityEvent) {
         if (event.rightClicked is Villager) {
@@ -26,6 +29,12 @@ class ResidentListener : Listener {
         if (event.entity is Villager) {
             event.isCancelled = true
         }
+    }
+
+    @EventHandler
+    fun onDeath(event: EntityDeathEvent) {
+        val villager = event.entity as? Villager ?: return
+        context.gameplay.handleResidentDeath(villager.uniqueId)
     }
 }
 
@@ -51,6 +60,6 @@ class ResidentCommands(
 
 class ResidentModule(context: PluginContext) : FeatureModule {
     override val id: String = "resident"
-    override val listeners: List<Listener> = listOf(ResidentListener())
+    override val listeners: List<Listener> = listOf(ResidentListener(context))
     override val commandContributors: List<CommandContributor> = listOf(ResidentCommands(context))
 }

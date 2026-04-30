@@ -42,6 +42,7 @@ resident:
   limit-reached: "<prefix><red>居民已达到上限。</red>"
   insufficient-food: "<prefix><red>粮食不足，无法招募居民。</red>"
   recruited: "<prefix><green>已招募居民：<name>。</green>"
+  died: "<prefix><red>居民 <name> 已死亡。</red>"
 
 tech:
   already: "<prefix><gray><tech> 已研究。</gray>"
