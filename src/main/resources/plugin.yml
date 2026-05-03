@@ -7,6 +7,11 @@ load: POSTWORLD
 folia-supported: true
 authors: [ AdLamb ]
 prefix: CubeXSLG
+
+# 软依赖 - WorldEdit（用于 schematic 建筑加载）
+softdepend:
+  - WorldEdit
+
 permissions:
   cubexslg.command:
     description: Access to CubeXSLG root commands

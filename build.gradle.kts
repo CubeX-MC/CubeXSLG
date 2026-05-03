@@ -8,6 +8,7 @@ plugins {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://maven.enginehub.org/repo/") // WorldEdit
 }
 
 dependencies {
@@ -19,6 +20,9 @@ dependencies {
     implementation("com.h2database:h2:2.4.240")
     implementation("org.mariadb.jdbc:mariadb-java-client:3.5.8")
     implementation("net.kyori:adventure-text-minimessage:5.0.1")
+    
+    // WorldEdit 7.2.15 - 软依赖（编译时可用，运行时可选）
+    compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.2.15")
 }
 
 kotlin {

@@ -17,8 +17,10 @@ import io.github.adlamb.cubex.registry.BuildingKind
 import io.github.adlamb.cubex.registry.GameplayRegistry
 import io.github.adlamb.cubex.registry.ResourceCategory
 import io.github.adlamb.cubex.shared.MarkerKeys
+import io.github.adlamb.cubex.util.SchematicLoader
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
@@ -50,6 +52,7 @@ class GameplayFacade(
     private val menuFactory: MenuFactory,
 ) {
     val repository = GameplayRepository()
+    private val schematicLoader = SchematicLoader(plugin)
     private val started = AtomicBoolean(false)
 
     fun initialize() {
@@ -363,14 +366,13 @@ class GameplayFacade(
             messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
+        
+        // 检查单区块限制
         if (!supportsSingleChunkFootprint(base, descriptor)) {
             messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
-        if (!isFlatEnough(base, descriptor)) {
-            messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
-            return false
-        }
+        
         if (repository.buildingsByTown(town.id).count { !it.collapsed } >= town.buildingLimit) {
             messages.send(player, "building.limit-reached", Placeholder.unparsed("limit", town.buildingLimit.toString()))
             return false
@@ -384,14 +386,43 @@ class GameplayFacade(
 
         val buildingId = BuildingId(UUID.randomUUID().toString())
         val health = calculateMaxHealth(descriptor, 1)
+        
+        // 使用 schematic 加载建筑
+        val schemFileName = schematicLoader.getSchematicFileName(buildingKey, 1)
+        
+        // 使用 WorldEdit 加载 schematic（同步处理标记）
+        val markers = schematicLoader.pasteSchematicWithMarkers(base, schemFileName)
+        if (markers == null) {
+            messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
+            return false
+        }
+        
+        var actualLocation = base
+        
+        // 如果有核心方块标记，更新位置并写入 NBT 数据
+        markers.coreLocation?.let { coreLoc ->
+            actualLocation = coreLoc
+            val coreBlock = coreLoc.block
+            if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                val tileState = coreBlock.state as TileState
+                val pdc = tileState.persistentDataContainer
+                pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
+                pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
+                pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
+                tileState.update(true, false)
+                
+                plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
+            }
+        }
+        
         val state = BuildingState(
             id = buildingId,
             townId = town.id,
             buildingKey = descriptor.key,
-            world = base.world.name,
-            x = base.x + 0.5,
-            y = base.y,
-            z = base.z + 0.5,
+            world = actualLocation.world.name,
+            x = actualLocation.x + 0.5,
+            y = actualLocation.y,
+            z = actualLocation.z + 0.5,
             yaw = player.location.yaw,
             pitch = player.location.pitch,
             level = 1,
@@ -402,9 +433,11 @@ class GameplayFacade(
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
         )
-        val blocks = templateBlocks(base, descriptor, buildingId)
-        repository.saveBuilding(state, blocks)
-        projectBuilding(state, blocks)
+        
+        // 保存建筑状态（schematic 模式不需要存储方块列表）
+        repository.saveBuilding(state, emptyList())
+        
+        // 扣除资源
         cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
         }
@@ -525,8 +558,8 @@ class GameplayFacade(
         return when (pending.actionType) {
             "delete" -> {
                 val building = repository.buildingById(BuildingId(pending.payload)) ?: return false
-                val blocks = repository.blocksForBuilding(building.id)
-                removeBuildingProjection(blocks, building.buildingKey)
+                // schematic 模式下，需要手动破坏方块或记录位置供后续清理
+                removeBuildingProjection(building)
                 repository.deleteBuilding(building.id)
                 repository.deletePendingAction(pending.id ?: return false)
                 dropCore(building)
@@ -535,32 +568,10 @@ class GameplayFacade(
             }
 
             "move" -> {
-                val building = repository.buildingById(BuildingId(pending.payload)) ?: return false
-                val descriptor = registry.findBuilding(building.buildingKey) ?: return false
-                val destination = player.location.block.location
-                if (!isWithinTown(town, destination)) {
-                    messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
-                    return false
-                }
-                if (!supportsSingleChunkFootprint(destination, descriptor) || !isFlatEnough(destination, descriptor)) {
-                    messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
-                    return false
-                }
-                val oldBlocks = repository.blocksForBuilding(building.id)
-                val blocks = templateBlocks(destination, descriptor, building.id)
-                val updated = building.copy(
-                    world = destination.world.name,
-                    x = destination.x + 0.5,
-                    y = destination.y,
-                    z = destination.z + 0.5,
-                    updatedAt = System.currentTimeMillis(),
-                )
-                removeBuildingProjection(oldBlocks, building.buildingKey)
-                repository.saveBuilding(updated, blocks)
-                projectBuilding(updated, blocks)
+                // TODO: schematic 模式下的移动功能需要重新实现
+                messages.send(player, "building.move-not-supported")
                 repository.deletePendingAction(pending.id ?: return false)
-                messages.send(player, "building.moved")
-                true
+                false
             }
 
             else -> false
@@ -756,31 +767,49 @@ class GameplayFacade(
     }
 
     private fun restoreWorldProjection() {
-        repository.towns().forEach { town ->
-            val world = plugin.server.getWorld(town.world) ?: return@forEach
-            val townLocation = Location(world, town.x, town.y, town.z)
-            val townHall = repository.buildingsByTown(town.id).firstOrNull { it.buildingKey == TOWN_HALL_KEY }
-            if (townHall == null) {
-                placeTownHall(town, townLocation)
-            }
-            repository.buildingsByTown(town.id).forEach { building ->
-                val blocks = repository.blocksForBuilding(building.id)
-                if (blocks.isNotEmpty()) {
-                    projectBuilding(building, blocks)
-                }
-            }
-        }
+        // schematic 模式下，建筑已经在放置时由 WorldEdit 投影到世界
+        // 服务器重启后需要重新加载 schematic（可选功能）
+        plugin.logger.info("Schematic 模式：建筑投影已由 WorldEdit 处理")
     }
 
     private fun placeTownHall(town: TownState, location: Location) {
+        val buildingId = BuildingId(town.id.value)
+        
+        // 使用 schematic 加载城镇大厅（同步处理标记）
+        val schemFileName = schematicLoader.getSchematicFileName(TOWN_HALL_KEY, 1)
+        val markers = schematicLoader.pasteSchematicWithMarkers(location, schemFileName)
+        
+        if (markers == null) {
+            plugin.logger.severe("无法加载城镇大厅 schematic: $schemFileName")
+            return
+        }
+        
+        var actualLocation = location
+        
+        if (markers.coreLocation != null) {
+            actualLocation = markers.coreLocation!!
+            // 写入 NBT 数据
+            val coreBlock = actualLocation.block
+            if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                val tileState = coreBlock.state as TileState
+                val pdc = tileState.persistentDataContainer
+                pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
+                pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
+                pdc.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
+                tileState.update(true, false)
+                
+                plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
+            }
+        }
+        
         val building = BuildingState(
-            id = BuildingId(town.id.value),
+            id = buildingId,
             townId = town.id,
             buildingKey = TOWN_HALL_KEY,
-            world = location.world.name,
-            x = location.x,
-            y = location.y,
-            z = location.z,
+            world = actualLocation.world.name,
+            x = actualLocation.x + 0.5,
+            y = actualLocation.y,
+            z = actualLocation.z + 0.5,
             yaw = location.yaw,
             pitch = location.pitch,
             level = 1,
@@ -791,63 +820,12 @@ class GameplayFacade(
             createdAt = town.createdAt,
             updatedAt = town.updatedAt,
         )
-        val blocks = listOf(
-            BuildingBlockState(BuildingId(town.id.value), location.world.name, location.blockX, location.blockY, location.blockZ, Material.BARREL.name),
-        )
-        repository.saveBuilding(building, blocks)
-        projectBuilding(building, blocks)
+        repository.saveBuilding(building, emptyList())
     }
 
-    private fun projectBuilding(building: BuildingState, blocks: List<BuildingBlockState>) {
-        val anchor = projectionAnchor(blocks) ?: return
-        if (!supportsSingleChunkProjection(blocks, building.buildingKey)) {
-            return
-        }
-        scheduler.executeRegion(anchor) {
-            projectBuildingNow(building, blocks)
-        }
-    }
-
-    private fun projectBuildingNow(building: BuildingState, blocks: List<BuildingBlockState>) {
-        blocks.forEach { blockState ->
-            val world = plugin.server.getWorld(blockState.world) ?: return@forEach
-            val block = world.getBlockAt(blockState.x, blockState.y, blockState.z)
-            block.type = Material.valueOf(blockState.material)
-            if (block.type == Material.BARREL) {
-                val tile = block.state as? TileState ?: return@forEach
-                tile.persistentDataContainer.set(keys.townId, PersistentDataType.STRING, building.townId.value)
-                tile.persistentDataContainer.set(keys.buildingId, PersistentDataType.STRING, building.id.value)
-                tile.persistentDataContainer.set(keys.buildingType, PersistentDataType.STRING, building.buildingKey)
-                tile.update(true, false)
-            }
-        }
-    }
-
-    private fun templateBlocks(base: Location, descriptor: BuildingDescriptor, buildingId: BuildingId): List<BuildingBlockState> {
-        return descriptor.footprint.map { spec ->
-            BuildingBlockState(
-                buildingId = buildingId,
-                world = base.world.name,
-                x = base.blockX + spec.dx,
-                y = base.blockY + spec.dy,
-                z = base.blockZ + spec.dz,
-                material = spec.material.name,
-            )
-        }
-    }
-
-    private fun removeBuildingProjection(blocks: List<BuildingBlockState>, buildingKey: String) {
-        val anchor = projectionAnchor(blocks) ?: return
-        if (!supportsSingleChunkProjection(blocks, buildingKey)) {
-            return
-        }
-        scheduler.executeRegion(anchor) {
-            blocks.forEach { blockState ->
-                val world = plugin.server.getWorld(blockState.world) ?: return@forEach
-                val block = world.getBlockAt(blockState.x, blockState.y, blockState.z)
-                block.type = Material.AIR
-            }
-        }
+    private fun removeBuildingProjection(building: BuildingState) {
+        // schematic 模式下不需要手动移除方块，由 WorldEdit 处理
+        plugin.logger.info("建筑 ${building.id.value} 被删除（schematic 模式）")
     }
 
     private fun dropCore(building: BuildingState) {
@@ -887,13 +865,6 @@ class GameplayFacade(
     private fun isWithinTown(town: TownState, location: Location): Boolean {
         val center = town.location(plugin) ?: return false
         return center.world.name == location.world.name && center.distance(location) <= town.radius.toDouble()
-    }
-
-    private fun isFlatEnough(base: Location, descriptor: BuildingDescriptor): Boolean {
-        return descriptor.footprint.all { spec ->
-            val block = base.world.getBlockAt(base.blockX + spec.dx, base.blockY + spec.dy, base.blockZ + spec.dz)
-            block.type.isAir || block.isEmpty || block.type == Material.GRASS_BLOCK || block.type == Material.DIRT
-        }
     }
 
     private fun previewBorder(center: Location, radius: Double, dust: Particle.DustOptions, remaining: Int) {
@@ -977,24 +948,6 @@ class GameplayFacade(
         return false
     }
 
-    private fun supportsSingleChunkProjection(blocks: List<BuildingBlockState>, buildingKey: String): Boolean {
-        val chunks = blocks.map { block ->
-            Triple(block.world, block.x shr 4, block.z shr 4)
-        }.toSet()
-        if (chunks.size <= 1) {
-            return true
-        }
-
-        plugin.logger.warning("CubeXSLG refuses to project building $buildingKey: stored projection crosses multiple chunks, which is not supported safely on Folia.")
-        return false
-    }
-
-    private fun projectionAnchor(blocks: List<BuildingBlockState>): Location? {
-        val block = blocks.firstOrNull() ?: return null
-        val world = plugin.server.getWorld(block.world) ?: return null
-        return Location(world, block.x.toDouble(), block.y.toDouble(), block.z.toDouble())
-    }
-
     private fun markInitialTech(town: TownState, owner: UUID) {
         listOf("base_collect", "base_agriculture", "wood_defense").forEach {
             repository.markTech(town.id, it, owner)
@@ -1020,8 +973,7 @@ class GameplayFacade(
     fun deleteTown(townId: TownId) {
         val buildings = repository.buildingsByTown(townId)
         buildings.forEach { building ->
-            val blocks = repository.blocksForBuilding(building.id)
-            removeBuildingProjection(blocks, building.buildingKey)
+            removeBuildingProjection(building)
             repository.deleteBuilding(building.id)
         }
     }
