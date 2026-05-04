@@ -411,6 +411,12 @@ class GameplayFacade(
                     pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
                     pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
                     pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
+                    pdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
+                    pdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
+                    pdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
+                    pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
+                    pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
+                    pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
                     tileState.update(true, false)
                     
                     plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
@@ -806,6 +812,12 @@ class GameplayFacade(
                     pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
                     pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
                     pdc.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
+                    pdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
+                    pdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
+                    pdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
+                    pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
+                    pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
+                    pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
                     tileState.update(true, false)
                     
                     plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
@@ -838,9 +850,31 @@ class GameplayFacade(
         }
     }
 
-    private fun removeBuildingProjection(building: BuildingState) {
-        // schematic 模式下不需要手动移除方块，由 WorldEdit 处理
-        plugin.logger.info("建筑 ${building.id.value} 被删除（schematic 模式）")
+    fun removeBuildingProjection(building: BuildingState) {
+        val world = plugin.server.getWorld(building.world) ?: run {
+            plugin.logger.warning("建筑 ${building.id.value} 所在世界 ${building.world} 不存在，跳过清除")
+            return
+        }
+        val coreLocation = building.location(plugin) ?: return
+        val coreBlock = coreLocation.block
+        if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+            val pdc = (coreBlock.state as TileState).persistentDataContainer
+            val originX = pdc.get(keys.schemOriginX, PersistentDataType.INTEGER)
+            val originY = pdc.get(keys.schemOriginY, PersistentDataType.INTEGER)
+            val originZ = pdc.get(keys.schemOriginZ, PersistentDataType.INTEGER)
+            val width = pdc.get(keys.schemWidth, PersistentDataType.INTEGER)
+            val height = pdc.get(keys.schemHeight, PersistentDataType.INTEGER)
+            val length = pdc.get(keys.schemLength, PersistentDataType.INTEGER)
+            if (originX != null && originY != null && originZ != null && width != null && height != null && length != null) {
+                schematicLoader.removeSchematicFromWorld(originX, originY, originZ, width, height, length, world)
+                plugin.logger.info("建筑 ${building.id.value} 已清除: ($width x $height x $length) at ($originX, $originY, $originZ)")
+            } else {
+                plugin.logger.warning("建筑 ${building.id.value} 缺少 schematic 边界信息，仅清除核心方块")
+            }
+        }
+        if (coreBlock.type == Material.BARREL) {
+            coreBlock.setType(Material.AIR)
+        }
     }
 
     private fun dropCore(building: BuildingState) {
@@ -989,8 +1023,8 @@ class GameplayFacade(
         val buildings = repository.buildingsByTown(townId)
         buildings.forEach { building ->
             removeBuildingProjection(building)
-            repository.deleteBuilding(building.id)
         }
+        repository.deleteTown(townId)
     }
 
     fun transferTown(townName: String, newOwnerUuid: UUID): Boolean {

@@ -394,6 +394,7 @@ class AdminCommands(
             return 0
         }
 
+        context.gameplay.removeBuildingProjection(building)
         context.gameplay.repository.deleteBuilding(BuildingId(buildingId))
         context.messages.send(source.sender, "admin.building.deleted", Placeholder.unparsed("id", buildingId))
         return 1
@@ -508,7 +509,7 @@ class AdminCommands(
             return 0
         }
 
-        // Note: Need to implement tech reset in repository
+        context.gameplay.repository.resetTechForTown(town.id)
         context.messages.send(source.sender, "admin.tech.reset", Placeholder.unparsed("name", townName))
         return 1
     }

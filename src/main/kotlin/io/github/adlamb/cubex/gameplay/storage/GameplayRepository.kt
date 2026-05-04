@@ -214,9 +214,31 @@ class GameplayRepository {
         }
     }
 
+    fun resetTechForTown(townId: TownId) = transaction {
+        TechProgressTable.deleteWhere { TechProgressTable.townId eq townId.value }
+    }
+
     fun deleteBuilding(buildingId: BuildingId) = transaction {
         BuildingsTable.deleteWhere { BuildingsTable.id eq buildingId.value }
         BuildingBlocksTable.deleteWhere { BuildingBlocksTable.buildingId eq buildingId.value }
+    }
+
+    fun deleteTown(townId: TownId) = transaction {
+        TownsTable.deleteWhere { TownsTable.id eq townId.value }
+        ResourceBalancesTable.deleteWhere { ResourceBalancesTable.townId eq townId.value }
+        ResourceLedgerTable.deleteWhere { ResourceLedgerTable.townId eq townId.value }
+        TechProgressTable.deleteWhere { TechProgressTable.townId eq townId.value }
+        PendingActionsTable.deleteWhere { PendingActionsTable.townId eq townId.value }
+        RailRoutesTable.deleteWhere { RailRoutesTable.townId eq townId.value }
+        CargoJobsTable.deleteWhere { CargoJobsTable.townId eq townId.value }
+        CombatStateTable.deleteWhere { CombatStateTable.townId eq townId.value }
+        val buildingIds = BuildingsTable.selectAll().filter { it[BuildingsTable.townId] == townId.value }
+            .map { it[BuildingsTable.id] }
+        buildingIds.forEach { id ->
+            BuildingBlocksTable.deleteWhere { BuildingBlocksTable.buildingId eq id }
+        }
+        BuildingsTable.deleteWhere { BuildingsTable.townId eq townId.value }
+        ResidentsTable.deleteWhere { ResidentsTable.townId eq townId.value }
     }
 
     fun blocksForBuilding(buildingId: BuildingId): List<BuildingBlockState> = transaction {

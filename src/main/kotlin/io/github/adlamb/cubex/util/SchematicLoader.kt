@@ -21,7 +21,13 @@ import java.util.concurrent.CompletableFuture
 data class PasteScanResult(
     val markers: Map<String, Location>,
     val coreFound: Boolean,
-    val signCount: Int
+    val signCount: Int,
+    val originX: Int,
+    val originY: Int,
+    val originZ: Int,
+    val width: Int,
+    val height: Int,
+    val length: Int,
 )
 
 /**
@@ -86,8 +92,27 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                 val height = dimensions.y
                 val length = dimensions.z
 
+                val region = clipboard.region
+                val regionMin = region.minimumPoint
+                val regionMax = region.maximumPoint
+                val clipOrigin = clipboard.origin
+
+                val offsetX = clipOrigin.x - regionMin.x
+                val offsetY = clipOrigin.y - regionMin.y
+                val offsetZ = clipOrigin.z - regionMin.z
+
+                val actualOriginX = origin.blockX - offsetX
+                val actualOriginY = origin.blockY - offsetY
+                val actualOriginZ = origin.blockZ - offsetZ
+                val actualWidth = regionMax.x - regionMin.x + 1
+                val actualHeight = regionMax.y - regionMin.y + 1
+                val actualLength = regionMax.z - regionMin.z + 1
+
                 plugin.logger.info("开始加载蓝图: ${schemFile.absolutePath}")
                 plugin.logger.info("蓝图尺寸: $width x $height x $length")
+                if (offsetX != 0 || offsetY != 0 || offsetZ != 0) {
+                    plugin.logger.info("剪贴板偏移: ($offsetX, $offsetY, $offsetZ), 实际原点: ($actualOriginX, $actualOriginY, $actualOriginZ)")
+                }
                 plugin.logger.info("粘贴原点: ${origin.blockX}, ${origin.blockY}, ${origin.blockZ}")
 
                 // === 第二阶段：粘贴到世界（使用区域调度器） ===
@@ -129,9 +154,9 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                 for (x in 0 until width) {
                                     for (y in 0 until height) {
                                         for (z in 0 until length) {
-                                            val worldX = origin.blockX + x
-                                            val worldY = origin.blockY + y
-                                            val worldZ = origin.blockZ + z
+                                            val worldX = origin.blockX + x - offsetX
+                                            val worldY = origin.blockY + y - offsetY
+                                            val worldZ = origin.blockZ + z - offsetZ
                                             val loc = Location(world, worldX.toDouble(), worldY.toDouble(), worldZ.toDouble())
 
                                             val block = world.getBlockAt(loc)
@@ -193,7 +218,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                     plugin.logger.warning("✗ 未找到核心方块标记！请检查 schematic 中是否有 [SLG] + CORE 告示牌")
                                 }
                                 
-                                future.complete(PasteScanResult(markers, coreFound, signCount))
+                                future.complete(PasteScanResult(markers, coreFound, signCount, actualOriginX, actualOriginY, actualOriginZ, actualWidth, actualHeight, actualLength))
                             } catch (e: Exception) {
                                 future.completeExceptionally(e)
                             }
@@ -215,5 +240,44 @@ class SchematicLoader(private val plugin: JavaPlugin) {
      */
     fun getSchematicFileName(buildingType: String, level: Int): String {
         return "${buildingType.lowercase()}_level$level.schem"
+    }
+
+    fun removeSchematicFromWorld(
+        originX: Int,
+        originY: Int,
+        originZ: Int,
+        width: Int,
+        height: Int,
+        length: Int,
+        world: org.bukkit.World,
+    ) {
+        val loc = Location(world, originX.toDouble(), originY.toDouble(), originZ.toDouble())
+        Bukkit.getRegionScheduler().run(plugin, loc) { _ ->
+            try {
+                val weWorld = BukkitAdapter.adapt(world)
+                val editSession = WorldEdit.getInstance().newEditSession(weWorld)
+                try {
+                    for (x in 0 until width) {
+                        for (y in 0 until height) {
+                            for (z in 0 until length) {
+                                val airType = com.sk89q.worldedit.world.block.BlockTypes.AIR
+                                if (airType != null) {
+                                    editSession.setBlock(
+                                        BlockVector3.at(originX + x, originY + y, originZ + z),
+                                        airType.defaultState,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    editSession.close()
+                }
+                plugin.logger.info("已清除建筑 schematic 区域 ($width x $height x $length) at ($originX, $originY, $originZ)")
+            } catch (e: Exception) {
+                plugin.logger.severe("清除 schematic 区域失败: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
 }

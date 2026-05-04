@@ -10,4 +10,10 @@ class MarkerKeys(plugin: JavaPlugin) {
     val residentId = NamespacedKey(plugin, "resident_id")
     val pendingAction = NamespacedKey(plugin, "pending_action")
     val menuId = NamespacedKey(plugin, "menu_id")
+    val schemOriginX = NamespacedKey(plugin, "schem_origin_x")
+    val schemOriginY = NamespacedKey(plugin, "schem_origin_y")
+    val schemOriginZ = NamespacedKey(plugin, "schem_origin_z")
+    val schemWidth = NamespacedKey(plugin, "schem_width")
+    val schemHeight = NamespacedKey(plugin, "schem_height")
+    val schemLength = NamespacedKey(plugin, "schem_length")
 }

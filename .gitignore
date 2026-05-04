@@ -33,3 +33,4 @@ bin/
 .lingma/
 .gradle/
 build/
+/opencode.json
