@@ -2,16 +2,17 @@ package io.github.adlamb.cubex.feature.combat
 
 import io.github.adlamb.cubex.bootstrap.PluginContext
 import io.github.adlamb.cubex.command.CommandContributor
-import io.github.adlamb.cubex.gameplay.model.BuildingId
 import io.github.adlamb.cubex.module.FeatureModule
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
+import org.bukkit.Material
 import org.bukkit.block.TileState
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockExplodeEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.persistence.PersistentDataType
 
@@ -20,38 +21,54 @@ class CombatListener(
 ) : Listener {
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
-        val state = event.block.state
-        val buildingId = (state as? TileState)
-            ?.persistentDataContainer
-            ?.get(context.keys.buildingId, PersistentDataType.STRING)
-            ?: return
-        event.isCancelled = true
-        val record = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return
-        buildingDamage(record.id.value, 20)
+        val location = event.block.location
+        val bounds = context.gameplay.findBuildingAt(location) ?: return
+        val block = event.block
+        if (block.type == Material.BARREL && block.state is TileState) {
+            val pdc = (block.state as TileState).persistentDataContainer
+            if (pdc.has(context.keys.buildingId, PersistentDataType.STRING)) {
+                event.isCancelled = true
+                return
+            }
+        }
+        context.gameplay.hitBuildingBlock(bounds.buildingId.value)
     }
 
     @EventHandler
-    fun onExplode(event: EntityExplodeEvent) {
-        event.blockList().forEach { block ->
-            val buildingId = (block.state as? TileState)
-                ?.persistentDataContainer
-                ?.get(context.keys.buildingId, PersistentDataType.STRING)
-                ?: return@forEach
-            val record = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return@forEach
-            buildingDamage(record.id.value, 15)
-        }
+    fun onEntityExplode(event: EntityExplodeEvent) {
+        handleExplosionBlocks(event.blockList())
     }
 
-    private fun buildingDamage(buildingId: String, amount: Int) {
-        val building = context.gameplay.repository.buildingById(BuildingId(buildingId)) ?: return
-        val nextHealth = (building.health - amount).coerceAtLeast(0)
-        val updated = building.copy(
-            health = nextHealth,
-            collapsed = nextHealth <= building.maxHealth / 2,
-            active = nextHealth > building.maxHealth / 2,
-            updatedAt = System.currentTimeMillis(),
-        )
-        context.gameplay.repository.updateBuilding(updated)
+    @EventHandler
+    fun onBlockExplode(event: BlockExplodeEvent) {
+        handleExplosionBlocks(event.blockList())
+    }
+
+    private fun handleExplosionBlocks(blocks: MutableList<org.bukkit.block.Block>) {
+        val damagedBuildings = mutableMapOf<String, Int>()
+        val blocksToRemove = mutableListOf<org.bukkit.block.Block>()
+
+        blocks.forEach { block ->
+            val bounds = context.gameplay.findBuildingAt(block.location) ?: return@forEach
+
+            if (block.type == Material.BARREL && block.state is TileState) {
+                val pdc = (block.state as TileState).persistentDataContainer
+                if (pdc.has(context.keys.buildingId, PersistentDataType.STRING)) {
+                    blocksToRemove.add(block)
+                    return@forEach
+                }
+            }
+
+            damagedBuildings[bounds.buildingId.value] = (damagedBuildings[bounds.buildingId.value] ?: 0) + 1
+        }
+
+        blocksToRemove.forEach { blocks.remove(it) }
+
+        damagedBuildings.forEach { (buildingId, hitCount) ->
+            repeat(hitCount) {
+                context.gameplay.applyExplosionDamageToBuilding(buildingId)
+            }
+        }
     }
 }
 

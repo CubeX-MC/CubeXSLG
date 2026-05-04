@@ -407,16 +407,7 @@ class AdminCommands(
             return 0
         }
 
-        val descriptor = context.registry.findBuilding(building.buildingKey)
-        if (descriptor == null) {
-            context.messages.send(source.sender, "admin.building.invalid_type")
-            return 0
-        }
-
-        // 计算最大生命值: footprint.size * 10 * levelMultiplier
-        val levelMultiplier = 1.0 + 0.2 * (level - 1)
-        val maxHealth = kotlin.math.ceil(descriptor.footprint.size * 10.0 * levelMultiplier).toInt().coerceAtLeast(20)
-        val updated = building.copy(level = level, maxHealth = maxHealth, health = maxHealth)
+        val updated = building.copy(level = level, updatedAt = System.currentTimeMillis())
         context.gameplay.repository.updateBuilding(updated)
 
         context.messages.send(source.sender, "admin.building.level_set",

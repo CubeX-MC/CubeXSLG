@@ -29,6 +29,7 @@ import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.TileState
 import org.bukkit.entity.Player
+import org.bukkit.entity.TNTPrimed
 import org.bukkit.entity.Villager
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -54,11 +55,25 @@ class GameplayFacade(
     val repository = GameplayRepository()
     private val schematicLoader = SchematicLoader(plugin)
     private val started = AtomicBoolean(false)
+    private val buildingBoundsMap = mutableMapOf<BuildingId, BuildingBounds>()
+    private var tickCounter = 0
+
+    data class BuildingBounds(
+        val buildingId: BuildingId,
+        val world: String,
+        val minX: Int,
+        val minY: Int,
+        val minZ: Int,
+        val maxX: Int,
+        val maxY: Int,
+        val maxZ: Int,
+    )
 
     fun initialize() {
         database.initialize()
         repository.initializeSchema()
         restoreWorldProjection()
+        loadBuildingBounds()
     }
 
     fun start() {
@@ -385,9 +400,7 @@ class GameplayFacade(
         }
 
         val buildingId = BuildingId(UUID.randomUUID().toString())
-        val health = calculateMaxHealth(descriptor, 1)
         
-        // 使用 schematic 加载建筑
         val schemFileName = schematicLoader.getSchematicFileName(buildingKey, 1)
         
         // 使用 WorldEdit 加载 schematic（异步处理标记）
@@ -417,12 +430,14 @@ class GameplayFacade(
                     pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
                     pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
                     pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
+                    pdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
                     tileState.update(true, false)
                     
                     plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
                 }
             }
             
+            val actualHealth = result.nonAirBlockCount.coerceAtLeast(1)
             val state = BuildingState(
                 id = buildingId,
                 townId = town.id,
@@ -434,16 +449,17 @@ class GameplayFacade(
                 yaw = player.location.yaw,
                 pitch = player.location.pitch,
                 level = 1,
-                health = health,
-                maxHealth = health,
+                health = actualHealth,
+                maxHealth = actualHealth,
                 active = true,
                 collapsed = false,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
             )
             
-            // 保存建筑状态（schematic 模式不需要存储方块列表）
             repository.saveBuilding(state, emptyList())
+            
+            registerBuildingBounds(buildingId, state.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
             
             // 扣除资源
             cost.forEach { (resource, amount) ->
@@ -473,11 +489,25 @@ class GameplayFacade(
             return false
         }
 
-        val missing = building.maxHealth - building.health
+        val coreLocation = building.location(plugin) ?: return false
+        val coreBlock = coreLocation.block
+        if (coreBlock.type != Material.BARREL || coreBlock.state !is TileState) {
+            messages.send(player, "building.no-repair-needed")
+            return false
+        }
+        val pdc = (coreBlock.state as TileState).persistentDataContainer
+        val ox = pdc.get(keys.schemOriginX, PersistentDataType.INTEGER) ?: return false
+        val oy = pdc.get(keys.schemOriginY, PersistentDataType.INTEGER) ?: return false
+        val oz = pdc.get(keys.schemOriginZ, PersistentDataType.INTEGER) ?: return false
+
+        recalculateHealth(building.id)
+        val refreshed = repository.buildingById(building.id) ?: return false
+        val missing = refreshed.maxHealth - refreshed.health
         if (missing <= 0) {
             messages.send(player, "building.no-repair-needed")
             return true
         }
+
         val stone = (missing / 10L).coerceAtLeast(1L)
         val food = (missing / 20L).coerceAtLeast(1L)
         val cost = mapOf("stone" to stone, "food" to food)
@@ -488,8 +518,22 @@ class GameplayFacade(
         cost.forEach { (resource, amount) ->
             repository.adjustBalance(town.id, resource, -amount, "修复建筑", building.buildingKey, player.uniqueId.toString())
         }
-        repository.updateBuilding(building.copy(health = building.maxHealth, updatedAt = System.currentTimeMillis()))
-        messages.send(player, "building.repaired", Placeholder.unparsed("building", building.buildingKey))
+
+        val repairOrigin = Location(plugin.server.getWorld(building.world) ?: return false, ox.toDouble(), oy.toDouble(), oz.toDouble())
+        val schemFileName = schematicLoader.getSchematicFileName(building.buildingKey, building.level)
+        val future = schematicLoader.pasteSchematicAndScan(repairOrigin, schemFileName, ignoreAirBlocks = true)
+        if (future == null) {
+            messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
+            return false
+        }
+        future.thenAccept {
+            recalculateHealth(building.id)
+            messages.send(player, "building.repaired", Placeholder.unparsed("building", building.buildingKey))
+        }.exceptionally { ex ->
+            plugin.logger.severe("修复建筑失败: ${ex.message}")
+            messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
+            null
+        }
         return true
     }
 
@@ -509,8 +553,7 @@ class GameplayFacade(
             repository.adjustBalance(town.id, resource, -amount, "升级建筑", descriptor.displayName, player.uniqueId.toString())
         }
         val newLevel = building.level + 1
-        val newMax = calculateMaxHealth(descriptor, newLevel)
-        repository.updateBuilding(building.copy(level = newLevel, maxHealth = newMax, health = newMax, updatedAt = System.currentTimeMillis()))
+        repository.updateBuilding(building.copy(level = newLevel, updatedAt = System.currentTimeMillis()))
         messages.send(player, "building.upgraded", Placeholder.unparsed("building", descriptor.displayName))
         return true
     }
@@ -716,6 +759,8 @@ class GameplayFacade(
     }
 
     private fun tickWorld() {
+        tickCounter++
+        val doHealthRecalc = tickCounter % 100 == 0
         repository.towns().forEach { town ->
             val researched = repository.techProgress(town.id)
             repository.buildingsByTown(town.id).forEach { building ->
@@ -741,6 +786,13 @@ class GameplayFacade(
                     }
                 }
             }
+            if (doHealthRecalc) {
+                repository.buildingsByTown(town.id).forEach { building ->
+                    if (building.collapsed || !building.active) return@forEach
+                    recalculateHealth(building.id)
+                }
+            }
+            checkBuildingHealthTicks()
             refreshResidents(town, town.location(plugin)?.world?.time?.let { it in 0..12000L } ?: true)
             expirePendingActions(town)
         }
@@ -818,12 +870,14 @@ class GameplayFacade(
                     pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
                     pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
                     pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
+                    pdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
                     tileState.update(true, false)
                     
                     plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
                 }
             }
             
+            val actualHealth = result.nonAirBlockCount.coerceAtLeast(1)
             val building = BuildingState(
                 id = buildingId,
                 townId = town.id,
@@ -835,14 +889,16 @@ class GameplayFacade(
                 yaw = location.yaw,
                 pitch = location.pitch,
                 level = 1,
-                health = 200,
-                maxHealth = 200,
+                health = actualHealth,
+                maxHealth = actualHealth,
                 active = true,
                 collapsed = false,
                 createdAt = town.createdAt,
                 updatedAt = town.updatedAt,
             )
             repository.saveBuilding(building, emptyList())
+            
+            registerBuildingBounds(buildingId, building.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
         }.exceptionally { ex ->
             plugin.logger.severe("粘贴城镇大厅 schematic 失败: ${ex.message}")
             ex.printStackTrace()
@@ -851,6 +907,7 @@ class GameplayFacade(
     }
 
     fun removeBuildingProjection(building: BuildingState) {
+        unregisterBuildingBounds(building.id)
         val world = plugin.server.getWorld(building.world) ?: run {
             plugin.logger.warning("建筑 ${building.id.value} 所在世界 ${building.world} 不存在，跳过清除")
             return
@@ -882,6 +939,169 @@ class GameplayFacade(
             val dropLocation = building.location(plugin) ?: return@let
             scheduler.executeRegion(dropLocation) {
                 dropLocation.world.dropItemNaturally(dropLocation, createWand(descriptor))
+            }
+        }
+    }
+
+    private fun loadBuildingBounds() {
+        repository.towns().flatMap { town -> repository.buildingsByTown(town.id) }.forEach { building ->
+            if (building.collapsed) return@forEach
+            val coreLocation = building.location(plugin) ?: return@forEach
+            val coreBlock = coreLocation.block
+            if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                val pdc = (coreBlock.state as TileState).persistentDataContainer
+                val ox = pdc.get(keys.schemOriginX, PersistentDataType.INTEGER) ?: return@forEach
+                val oy = pdc.get(keys.schemOriginY, PersistentDataType.INTEGER) ?: return@forEach
+                val oz = pdc.get(keys.schemOriginZ, PersistentDataType.INTEGER) ?: return@forEach
+                val w = pdc.get(keys.schemWidth, PersistentDataType.INTEGER) ?: return@forEach
+                val h = pdc.get(keys.schemHeight, PersistentDataType.INTEGER) ?: return@forEach
+                val l = pdc.get(keys.schemLength, PersistentDataType.INTEGER) ?: return@forEach
+                registerBuildingBounds(building.id, building.world, ox, oy, oz, w, h, l)
+            }
+        }
+        plugin.logger.info("已加载 ${buildingBoundsMap.size} 个建筑边界")
+    }
+
+    fun registerBuildingBounds(buildingId: BuildingId, world: String, originX: Int, originY: Int, originZ: Int, width: Int, height: Int, length: Int) {
+        buildingBoundsMap[buildingId] = BuildingBounds(
+            buildingId = buildingId,
+            world = world,
+            minX = originX,
+            minY = originY,
+            minZ = originZ,
+            maxX = originX + width - 1,
+            maxY = originY + height - 1,
+            maxZ = originZ + length - 1,
+        )
+    }
+
+    fun unregisterBuildingBounds(buildingId: BuildingId) {
+        buildingBoundsMap.remove(buildingId)
+    }
+
+    fun findBuildingAt(location: Location): BuildingBounds? {
+        return buildingBoundsMap.values.firstOrNull { bounds ->
+            bounds.world == location.world.name &&
+                location.blockX in bounds.minX..bounds.maxX &&
+                location.blockY in bounds.minY..bounds.maxY &&
+                location.blockZ in bounds.minZ..bounds.maxZ
+        }
+    }
+
+    fun hitBuildingBlock(buildingId: String): Boolean {
+        val building = repository.buildingById(BuildingId(buildingId)) ?: return false
+        if (building.collapsed || !building.active) return false
+        val nextHealth = (building.health - 1).coerceAtLeast(0)
+        if (nextHealth == building.health) return false
+        val collapsed = nextHealth < building.maxHealth * 0.6
+        repository.updateBuilding(building.copy(health = nextHealth, collapsed = collapsed, active = !collapsed, updatedAt = System.currentTimeMillis()))
+        if (collapsed) {
+            triggerBuildingExplosion(building)
+        }
+        return true
+    }
+
+    fun applyExplosionDamageToBuilding(buildingId: String): Boolean {
+        val building = repository.buildingById(BuildingId(buildingId)) ?: return false
+        if (building.collapsed || !building.active) return false
+        val nextHealth = (building.health - 1).coerceAtLeast(0)
+        val collapsed = nextHealth < building.maxHealth * 0.6
+        repository.updateBuilding(building.copy(health = nextHealth, collapsed = collapsed, active = !collapsed, updatedAt = System.currentTimeMillis()))
+        if (collapsed) {
+            scheduleDeferredBuildingCleanup(building)
+            triggerBuildingExplosion(building)
+        }
+        return collapsed
+    }
+
+    fun recalculateHealth(buildingId: BuildingId): Boolean {
+        val building = repository.buildingById(buildingId) ?: return false
+        val coreLocation = building.location(plugin) ?: return false
+        val coreBlock = coreLocation.block
+        if (coreBlock.type != Material.BARREL || coreBlock.state !is TileState) return false
+        val pdc = (coreBlock.state as TileState).persistentDataContainer
+        val ox = pdc.get(keys.schemOriginX, PersistentDataType.INTEGER) ?: return false
+        val oy = pdc.get(keys.schemOriginY, PersistentDataType.INTEGER) ?: return false
+        val oz = pdc.get(keys.schemOriginZ, PersistentDataType.INTEGER) ?: return false
+        val w = pdc.get(keys.schemWidth, PersistentDataType.INTEGER) ?: return false
+        val h = pdc.get(keys.schemHeight, PersistentDataType.INTEGER) ?: return false
+        val l = pdc.get(keys.schemLength, PersistentDataType.INTEGER) ?: return false
+        val world = plugin.server.getWorld(building.world) ?: return false
+        var count = 0
+        for (dx in 0 until w) {
+            for (dy in 0 until h) {
+                for (dz in 0 until l) {
+                    val type = world.getBlockAt(ox + dx, oy + dy, oz + dz).type
+                    if (type != Material.AIR && type != Material.CAVE_AIR && type != Material.VOID_AIR && type != Material.STRUCTURE_VOID) {
+                        count++
+                    }
+                }
+            }
+        }
+        val collapsed = count < building.maxHealth * 0.6
+        repository.updateBuilding(building.copy(health = count, collapsed = collapsed, active = !collapsed, updatedAt = System.currentTimeMillis()))
+        if (collapsed) {
+            triggerBuildingExplosion(building)
+        }
+        return true
+    }
+
+    private fun triggerBuildingExplosion(building: BuildingState) {
+        val world = plugin.server.getWorld(building.world) ?: return
+        val core = building.location(plugin) ?: return
+        val coreBlock = core.block
+        val buildingKey = building.buildingKey
+        val townId = building.townId
+        val isTownHall = buildingKey == TOWN_HALL_KEY
+        if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+            val pdc = (coreBlock.state as TileState).persistentDataContainer
+            pdc.remove(keys.buildingId)
+            pdc.remove(keys.buildingType)
+            pdc.remove(keys.townId)
+            (coreBlock.state as TileState).update(true, false)
+        }
+        scheduler.executeRegion(core) {
+            coreBlock.setType(Material.TNT)
+            val tnt = world.spawn(core.clone().add(0.5, 0.0, 0.5), TNTPrimed::class.java)
+            tnt.fuseTicks = 40
+            tnt.yield = 3f
+            plugin.logger.info("建筑 ${building.id.value} 生命值过低 (< 60%)，触发自毁")
+        }
+        
+        scheduler.region(core).runLater(80) {
+            if (isTownHall) {
+                dropCoreAt(world, core, buildingKey)
+                deleteTown(townId)
+                plugin.logger.info("城镇大厅被摧毁，整个城镇 $townId 已删除")
+            } else {
+                repository.deleteBuilding(building.id)
+                unregisterBuildingBounds(building.id)
+                dropCoreAt(world, core, buildingKey)
+                plugin.logger.info("建筑 ${building.id.value} 已从数据库中删除")
+            }
+        }
+    }
+
+    private fun dropCoreAt(world: org.bukkit.World, location: Location, buildingKey: String) {
+        registry.findBuilding(buildingKey)?.let { descriptor ->
+            scheduler.executeRegion(location) {
+                world.dropItemNaturally(location, createWand(descriptor))
+            }
+        }
+    }
+
+    private fun scheduleDeferredBuildingCleanup(building: BuildingState) {
+        // bounds already unregistered in triggerBuildingExplosion
+    }
+
+    fun checkBuildingHealthTicks() {
+        repository.towns().forEach { town ->
+            repository.buildingsByTown(town.id).forEach { building ->
+                if (building.collapsed || !building.active) return@forEach
+                if (building.maxHealth > 0 && building.health < building.maxHealth * 0.6) {
+                    repository.updateBuilding(building.copy(collapsed = true, active = false, updatedAt = System.currentTimeMillis()))
+                    triggerBuildingExplosion(building)
+                }
             }
         }
     }

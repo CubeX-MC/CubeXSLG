@@ -28,6 +28,7 @@ data class PasteScanResult(
     val width: Int,
     val height: Int,
     val length: Int,
+    val nonAirBlockCount: Int,
 )
 
 /**
@@ -64,7 +65,8 @@ class SchematicLoader(private val plugin: JavaPlugin) {
      */
     fun pasteSchematicAndScan(
         origin: Location,
-        schematicName: String
+        schematicName: String,
+        ignoreAirBlocks: Boolean = false,
     ): CompletableFuture<PasteScanResult>? {
         if (!isWorldEditAvailable()) {
             plugin.logger.warning("WorldEdit 插件未安装")
@@ -129,7 +131,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                             val operation = com.sk89q.worldedit.session.ClipboardHolder(clipboard)
                                 .createPaste(editSession)
                                 .to(weOrigin)
-                                .ignoreAirBlocks(false)
+                                .ignoreAirBlocks(ignoreAirBlocks)
                                 .build()
 
                             Operations.complete(operation)
@@ -150,6 +152,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                 val markers = mutableMapOf<String, Location>()
                                 var coreFound = false
                                 var signCount = 0
+                                var nonAirBlockCount = 0
 
                                 for (x in 0 until width) {
                                     for (y in 0 until height) {
@@ -161,6 +164,9 @@ class SchematicLoader(private val plugin: JavaPlugin) {
 
                                             val block = world.getBlockAt(loc)
                                             val type = block.type
+                                            if (type != Material.AIR && type != Material.CAVE_AIR && type != Material.VOID_AIR && type != Material.STRUCTURE_VOID) {
+                                                nonAirBlockCount++
+                                            }
                                             if (type.name.uppercase().contains("SIGN")) {
                                                 val state = block.state
                                                 if (state is Sign) {
@@ -218,7 +224,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                     plugin.logger.warning("✗ 未找到核心方块标记！请检查 schematic 中是否有 [SLG] + CORE 告示牌")
                                 }
                                 
-                                future.complete(PasteScanResult(markers, coreFound, signCount, actualOriginX, actualOriginY, actualOriginZ, actualWidth, actualHeight, actualLength))
+                                future.complete(PasteScanResult(markers, coreFound, signCount, actualOriginX, actualOriginY, actualOriginZ, actualWidth, actualHeight, actualLength, nonAirBlockCount))
                             } catch (e: Exception) {
                                 future.completeExceptionally(e)
                             }
