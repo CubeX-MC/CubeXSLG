@@ -390,58 +390,67 @@ class GameplayFacade(
         // 使用 schematic 加载建筑
         val schemFileName = schematicLoader.getSchematicFileName(buildingKey, 1)
         
-        // 使用 WorldEdit 加载 schematic（同步处理标记）
-        val markers = schematicLoader.pasteSchematicWithMarkers(base, schemFileName)
-        if (markers == null) {
+        // 使用 WorldEdit 加载 schematic（异步处理标记）
+        val future = schematicLoader.pasteSchematicAndScan(base, schemFileName)
+        if (future == null) {
             messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
         
-        var actualLocation = base
-        
-        // 如果有核心方块标记，更新位置并写入 NBT 数据
-        markers.coreLocation?.let { coreLoc ->
-            actualLocation = coreLoc
-            val coreBlock = coreLoc.block
-            if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
-                val tileState = coreBlock.state as TileState
-                val pdc = tileState.persistentDataContainer
-                pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
-                pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
-                pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
-                tileState.update(true, false)
-                
-                plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
+        // 等待异步完成并处理结果
+        future.thenAccept { result ->
+            var actualLocation = base
+            
+            // 如果有核心方块标记，更新位置并写入 NBT 数据
+            result.markers["CORE"]?.let { coreLoc ->
+                actualLocation = coreLoc
+                val coreBlock = coreLoc.block
+                if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                    val tileState = coreBlock.state as TileState
+                    val pdc = tileState.persistentDataContainer
+                    pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
+                    pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
+                    pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
+                    tileState.update(true, false)
+                    
+                    plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
+                }
             }
+            
+            val state = BuildingState(
+                id = buildingId,
+                townId = town.id,
+                buildingKey = descriptor.key,
+                world = actualLocation.world.name,
+                x = actualLocation.x + 0.5,
+                y = actualLocation.y,
+                z = actualLocation.z + 0.5,
+                yaw = player.location.yaw,
+                pitch = player.location.pitch,
+                level = 1,
+                health = health,
+                maxHealth = health,
+                active = true,
+                collapsed = false,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+            )
+            
+            // 保存建筑状态（schematic 模式不需要存储方块列表）
+            repository.saveBuilding(state, emptyList())
+            
+            // 扣除资源
+            cost.forEach { (resource, amount) ->
+                repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
+            }
+            messages.send(player, "building.built", Placeholder.unparsed("building", descriptor.displayName))
+        }.exceptionally { ex ->
+            plugin.logger.severe("粘贴 schematic 失败: ${ex.message}")
+            ex.printStackTrace()
+            messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
+            null
         }
         
-        val state = BuildingState(
-            id = buildingId,
-            townId = town.id,
-            buildingKey = descriptor.key,
-            world = actualLocation.world.name,
-            x = actualLocation.x + 0.5,
-            y = actualLocation.y,
-            z = actualLocation.z + 0.5,
-            yaw = player.location.yaw,
-            pitch = player.location.pitch,
-            level = 1,
-            health = health,
-            maxHealth = health,
-            active = true,
-            collapsed = false,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-        )
-        
-        // 保存建筑状态（schematic 模式不需要存储方块列表）
-        repository.saveBuilding(state, emptyList())
-        
-        // 扣除资源
-        cost.forEach { (resource, amount) ->
-            repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
-        }
-        messages.send(player, "building.built", Placeholder.unparsed("building", descriptor.displayName))
         return true
     }
 
@@ -775,52 +784,58 @@ class GameplayFacade(
     private fun placeTownHall(town: TownState, location: Location) {
         val buildingId = BuildingId(town.id.value)
         
-        // 使用 schematic 加载城镇大厅（同步处理标记）
+        // 使用 schematic 加载城镇大厅（异步处理标记）
         val schemFileName = schematicLoader.getSchematicFileName(TOWN_HALL_KEY, 1)
-        val markers = schematicLoader.pasteSchematicWithMarkers(location, schemFileName)
+        val future = schematicLoader.pasteSchematicAndScan(location, schemFileName)
         
-        if (markers == null) {
+        if (future == null) {
             plugin.logger.severe("无法加载城镇大厅 schematic: $schemFileName")
             return
         }
         
-        var actualLocation = location
-        
-        if (markers.coreLocation != null) {
-            actualLocation = markers.coreLocation!!
-            // 写入 NBT 数据
-            val coreBlock = actualLocation.block
-            if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
-                val tileState = coreBlock.state as TileState
-                val pdc = tileState.persistentDataContainer
-                pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
-                pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
-                pdc.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
-                tileState.update(true, false)
-                
-                plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
+        future.thenAccept { result ->
+            var actualLocation = location
+            
+            result.markers["CORE"]?.let { coreLoc ->
+                actualLocation = coreLoc
+                // 写入 NBT 数据
+                val coreBlock = actualLocation.block
+                if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                    val tileState = coreBlock.state as TileState
+                    val pdc = tileState.persistentDataContainer
+                    pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
+                    pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
+                    pdc.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
+                    tileState.update(true, false)
+                    
+                    plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
+                }
             }
+            
+            val building = BuildingState(
+                id = buildingId,
+                townId = town.id,
+                buildingKey = TOWN_HALL_KEY,
+                world = actualLocation.world.name,
+                x = actualLocation.x + 0.5,
+                y = actualLocation.y,
+                z = actualLocation.z + 0.5,
+                yaw = location.yaw,
+                pitch = location.pitch,
+                level = 1,
+                health = 200,
+                maxHealth = 200,
+                active = true,
+                collapsed = false,
+                createdAt = town.createdAt,
+                updatedAt = town.updatedAt,
+            )
+            repository.saveBuilding(building, emptyList())
+        }.exceptionally { ex ->
+            plugin.logger.severe("粘贴城镇大厅 schematic 失败: ${ex.message}")
+            ex.printStackTrace()
+            null
         }
-        
-        val building = BuildingState(
-            id = buildingId,
-            townId = town.id,
-            buildingKey = TOWN_HALL_KEY,
-            world = actualLocation.world.name,
-            x = actualLocation.x + 0.5,
-            y = actualLocation.y,
-            z = actualLocation.z + 0.5,
-            yaw = location.yaw,
-            pitch = location.pitch,
-            level = 1,
-            health = 200,
-            maxHealth = 200,
-            active = true,
-            collapsed = false,
-            createdAt = town.createdAt,
-            updatedAt = town.updatedAt,
-        )
-        repository.saveBuilding(building, emptyList())
     }
 
     private fun removeBuildingProjection(building: BuildingState) {
