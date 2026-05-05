@@ -31,6 +31,7 @@ building:
   insufficient: "<prefix><red><building> 资源不足。</red>"
   built: "<prefix><green>建筑已成功建造：<building>。</green>"
   no-repair-needed: "<prefix><gray>该建筑当前不需要修复。</gray>"
+  repair-cost: "<prefix><yellow>修复消耗: 石头 <stone>, 粮食 <food></yellow>"
   repaired: "<prefix><green>建筑已修复：<building>。</green>"
   upgraded: "<prefix><green>建筑已升级：<building>。</green>"
   pending-delete: "<prefix><yellow>删除待确认，请执行 /slg confirm。</yellow>"

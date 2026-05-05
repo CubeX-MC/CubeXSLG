@@ -17,4 +17,7 @@ class MarkerKeys(plugin: JavaPlugin) {
     val schemHeight = NamespacedKey(plugin, "schem_height")
     val schemLength = NamespacedKey(plugin, "schem_length")
     val schemNonAirCount = NamespacedKey(plugin, "schem_non_air_count")
+    val schemPasteX = NamespacedKey(plugin, "schem_paste_x")
+    val schemPasteY = NamespacedKey(plugin, "schem_paste_y")
+    val schemPasteZ = NamespacedKey(plugin, "schem_paste_z")
 }

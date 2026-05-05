@@ -29,6 +29,9 @@ data class PasteScanResult(
     val height: Int,
     val length: Int,
     val nonAirBlockCount: Int,
+    val pasteOriginX: Int,
+    val pasteOriginY: Int,
+    val pasteOriginZ: Int,
 )
 
 /**
@@ -224,7 +227,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                     plugin.logger.warning("✗ 未找到核心方块标记！请检查 schematic 中是否有 [SLG] + CORE 告示牌")
                                 }
                                 
-                                future.complete(PasteScanResult(markers, coreFound, signCount, actualOriginX, actualOriginY, actualOriginZ, actualWidth, actualHeight, actualLength, nonAirBlockCount))
+                                future.complete(PasteScanResult(markers, coreFound, signCount, actualOriginX, actualOriginY, actualOriginZ, actualWidth, actualHeight, actualLength, nonAirBlockCount, origin.blockX, origin.blockY, origin.blockZ))
                             } catch (e: Exception) {
                                 future.completeExceptionally(e)
                             }
