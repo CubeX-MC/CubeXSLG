@@ -407,6 +407,11 @@ class GameplayFacade(
             messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
             return false
         }
+
+        if (checkBuildingOverlap(buildingKey, base)) {
+            messages.send(player, "building.overlap", Placeholder.unparsed("building", descriptor.displayName))
+            return false
+        }
         
         if (repository.buildingsByTown(town.id).count { !it.collapsed } >= town.buildingLimit) {
             messages.send(player, "building.limit-reached", Placeholder.unparsed("limit", town.buildingLimit.toString()))
@@ -1377,6 +1382,22 @@ class GameplayFacade(
             return true
         }
         return entity.location.distanceSquared(target) > 16.0
+    }
+
+    private fun checkBuildingOverlap(buildingKey: String, base: Location): Boolean {
+        val dims = getBuildingDimensions(buildingKey, 1) ?: return false
+        val minX = base.blockX - dims.offsetX
+        val minY = base.blockY - dims.offsetY
+        val minZ = base.blockZ - dims.offsetZ
+        val maxX = minX + dims.width
+        val maxY = minY + dims.height
+        val maxZ = minZ + dims.length
+        return buildingBoundsMap.values.any { existing ->
+            existing.world == base.world.name &&
+                !(maxX <= existing.minX || minX >= existing.maxX ||
+                  maxY <= existing.minY || minY >= existing.maxY ||
+                  maxZ <= existing.minZ || minZ >= existing.maxZ)
+        }
     }
 
     private fun supportsSingleChunkFootprint(base: Location, descriptor: BuildingDescriptor): Boolean {

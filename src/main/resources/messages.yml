@@ -28,6 +28,7 @@ building:
   outside-town: "<prefix><red><building> 必须放在你的领地内。</red>"
   invalid-terrain: "<prefix><red><building> 位置地形不合法。</red>"
   limit-reached: "<prefix><red>建筑数量已达上限 <limit>。</red>"
+  overlap: "<prefix><red><building> 与现有建筑重叠，请调整位置。</red>"
   insufficient: "<prefix><red><building> 资源不足。</red>"
   built: "<prefix><green>建筑已成功建造：<building>。</green>"
   no-repair-needed: "<prefix><gray>该建筑当前不需要修复。</gray>"
