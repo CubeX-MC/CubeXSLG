@@ -17,6 +17,7 @@ import io.github.adlamb.cubex.registry.BuildingKind
 import io.github.adlamb.cubex.registry.GameplayRegistry
 import io.github.adlamb.cubex.registry.ResourceCategory
 import io.github.adlamb.cubex.shared.MarkerKeys
+import io.github.adlamb.cubex.util.SchematicDimensions
 import io.github.adlamb.cubex.util.SchematicLoader
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
@@ -371,6 +372,22 @@ class GameplayFacade(
 
     fun buildingFrom(item: ItemStack?): String? = item?.itemMeta?.persistentDataContainer?.get(keys.buildingType, PersistentDataType.STRING)
 
+    fun getBuildingDimensions(buildingKey: String, level: Int): SchematicDimensions? {
+        return schematicLoader.getSchematicDimensions(buildingKey, level)
+    }
+
+    fun playerHasTownWithLocation(player: Player, location: Location): Boolean {
+        val town = townOf(player) ?: return false
+        return isWithinTown(town, location)
+    }
+
+    fun getPendingMoveInfo(player: Player): Pair<String, Int>? {
+        val town = townOf(player) ?: return null
+        val pending = repository.pendingActions(town.id, player.uniqueId).firstOrNull { it.actionType == "move" } ?: return null
+        val building = repository.buildingById(BuildingId(pending.payload)) ?: return null
+        return Pair(building.buildingKey, building.level)
+    }
+
     fun handleWandPlacement(player: Player, buildingKey: String, block: Block, face: BlockFace): Boolean {
         val town = townOf(player) ?: return false
         val descriptor = registry.findBuilding(buildingKey) ?: return false
@@ -694,10 +711,65 @@ class GameplayFacade(
             }
 
             "move" -> {
-                // TODO: schematic 模式下的移动功能需要重新实现
-                messages.send(player, "building.move-not-supported")
+                val building = repository.buildingById(BuildingId(pending.payload)) ?: return false
+                val target = player.getTargetBlockExact(6) ?: return false
+                val targetLoc = target.location
+                val face = player.rayTraceBlocks(6.0)?.hitBlockFace ?: BlockFace.UP
+                val newBase = target.getRelative(face).location.block.location
+
+                val coreLocation = building.location(plugin) ?: return false
                 repository.deletePendingAction(pending.id ?: return false)
-                false
+                removeBuildingProjection(building)
+                unregisterBuildingBounds(building.id)
+
+                val schemFileName = schematicLoader.getSchematicFileName(building.buildingKey, building.level)
+                val future = schematicLoader.pasteSchematicAndScan(newBase, schemFileName)
+                if (future == null) {
+                    messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
+                    return false
+                }
+                future.thenAccept { result ->
+                    var actualLocation = newBase
+                    result.markers["CORE"]?.let { coreLoc ->
+                        actualLocation = coreLoc
+                        val coreBlock = coreLoc.block
+                        if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
+                            val tileState = coreBlock.state as TileState
+                            val newPdc = tileState.persistentDataContainer
+                            newPdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
+                            newPdc.set(keys.buildingId, PersistentDataType.STRING, building.id.value)
+                            newPdc.set(keys.buildingType, PersistentDataType.STRING, building.buildingKey)
+                            newPdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
+                            newPdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
+                            newPdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
+                            newPdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
+                            newPdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
+                            newPdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
+                            newPdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
+                            newPdc.set(keys.schemPasteX, PersistentDataType.INTEGER, result.pasteOriginX)
+                            newPdc.set(keys.schemPasteY, PersistentDataType.INTEGER, result.pasteOriginY)
+                            newPdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, result.pasteOriginZ)
+                            tileState.update(true, false)
+                        }
+                    }
+                    val updated = building.copy(
+                        world = actualLocation.world.name,
+                        x = actualLocation.x + 0.5,
+                        y = actualLocation.y,
+                        z = actualLocation.z + 0.5,
+                        health = result.nonAirBlockCount.coerceAtLeast(1),
+                        maxHealth = result.nonAirBlockCount.coerceAtLeast(1),
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    repository.updateBuilding(updated)
+                    registerBuildingBounds(building.id, updated.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
+                    messages.send(player, "building.moved")
+                }.exceptionally { ex ->
+                    plugin.logger.severe("移动建筑失败: ${ex.message}")
+                    messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
+                    null
+                }
+                true
             }
 
             else -> false

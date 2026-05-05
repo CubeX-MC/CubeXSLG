@@ -15,6 +15,15 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.CompletableFuture
 
+data class SchematicDimensions(
+    val width: Int,
+    val height: Int,
+    val length: Int,
+    val offsetX: Int,
+    val offsetY: Int,
+    val offsetZ: Int,
+)
+
 /**
  * 粘贴 schematic 并扫描告示牌的结果
  */
@@ -47,16 +56,46 @@ class SchematicLoader(private val plugin: JavaPlugin) {
         private const val LOGISTICS_OUTPUT_MARKER = "O"
         private const val POWER_MARKER = "POWER"
     }
-    
-    /**
-     * 检查 WorldEdit 是否可用
-     */
+
+    private val dimensionCache = mutableMapOf<String, SchematicDimensions>()
+
     fun isWorldEditAvailable(): Boolean {
         return try {
             Class.forName("com.sk89q.worldedit.WorldEdit")
             true
         } catch (e: ClassNotFoundException) {
             false
+        }
+    }
+
+    fun getSchematicDimensions(buildingType: String, level: Int): SchematicDimensions? {
+        val key = "${buildingType.lowercase()}_level$level"
+        dimensionCache[key]?.let { return it }
+
+        val schemFolder = File(plugin.dataFolder, "schematics")
+        val schemFile = File(schemFolder, "${key}.schem")
+        if (!schemFile.exists()) return null
+
+        return try {
+            val format = ClipboardFormats.findByFile(schemFile) ?: return null
+            val clipboard = format.getReader(FileInputStream(schemFile)).read()
+
+            val region = clipboard.region
+            val regionMin = region.minimumPoint
+            val regionMax = region.maximumPoint
+            val clipOrigin = clipboard.origin
+            val w = regionMax.x - regionMin.x + 1
+            val h = regionMax.y - regionMin.y + 1
+            val l = regionMax.z - regionMin.z + 1
+            val offX = clipOrigin.x - regionMin.x
+            val offY = clipOrigin.y - regionMin.y
+            val offZ = clipOrigin.z - regionMin.z
+            val dims = SchematicDimensions(w, h, l, offX, offY, offZ)
+            dimensionCache[key] = dims
+            dims
+        } catch (e: Exception) {
+            plugin.logger.warning("读取 schematic 尺寸失败: $key - ${e.message}")
+            null
         }
     }
     
