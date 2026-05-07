@@ -26,6 +26,7 @@ import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
+import org.bukkit.Sound
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.TileState
@@ -494,6 +495,8 @@ class GameplayFacade(
                 repository.adjustBalance(town.id, resource, -amount, "建造${descriptor.displayName}", descriptor.displayName, player.uniqueId.toString())
             }
             messages.send(player, "building.built", Placeholder.unparsed("building", descriptor.displayName))
+            actualLocation.world.playSound(actualLocation, Sound.BLOCK_ANVIL_USE, 1.0f, 1.2f)
+            actualLocation.world.playSound(actualLocation, Sound.BLOCK_WOOD_PLACE, 1.0f, 0.8f)
         }.exceptionally { ex ->
             plugin.logger.severe("粘贴 schematic 失败: ${ex.message}")
             ex.printStackTrace()
@@ -618,6 +621,7 @@ class GameplayFacade(
                 }
                 recalculateHealthInternal(repository.buildingById(BuildingId(buildingId)) ?: return@thenAccept)
                 messages.send(player, "building.repaired", Placeholder.unparsed("building", buildingKey))
+                coreLocation.world.playSound(coreLocation, Sound.BLOCK_ANVIL_USE, 1.0f, 1.0f)
             }.exceptionally { ex ->
                 plugin.logger.severe("修复建筑失败: ${ex.message}")
                 messages.send(player, "building.failed", Placeholder.unparsed("building", buildingKey))
@@ -645,6 +649,10 @@ class GameplayFacade(
         val newLevel = building.level + 1
         repository.updateBuilding(building.copy(level = newLevel, updatedAt = System.currentTimeMillis()))
         messages.send(player, "building.upgraded", Placeholder.unparsed("building", descriptor.displayName))
+        building.location(plugin)?.let { loc ->
+            loc.world.playSound(loc, Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1.5f)
+            loc.world.playSound(loc, Sound.BLOCK_ANVIL_USE, 1.0f, 1.0f)
+        }
         return true
     }
 
@@ -712,6 +720,10 @@ class GameplayFacade(
                 repository.deletePendingAction(pending.id ?: return false)
                 dropCore(building)
                 messages.send(player, "building.deleted")
+                building.location(plugin)?.let { loc ->
+                    loc.world.playSound(loc, Sound.BLOCK_ANVIL_BREAK, 1.0f, 0.8f)
+                    loc.world.playSound(loc, Sound.ENTITY_ZOMBIE_BREAK_WOODEN_DOOR, 1.0f, 0.8f)
+                }
                 true
             }
 
@@ -1244,6 +1256,8 @@ class GameplayFacade(
             val tnt = world.spawn(core.clone().add(0.5, 0.0, 0.5), TNTPrimed::class.java)
             tnt.fuseTicks = 40
             tnt.yield = 3f
+            world.playSound(core, Sound.ENTITY_GENERIC_EXPLODE, 1.0f, 0.8f)
+            world.playSound(core, Sound.BLOCK_ANVIL_BREAK, 1.0f, 0.5f)
             plugin.logger.info("建筑 ${building.id.value} 生命值过低 (< 60%)，触发自毁")
         }
         
