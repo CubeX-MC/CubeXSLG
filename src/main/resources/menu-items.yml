@@ -2,189 +2,245 @@ menus:
   town-hall:
     title: "<white>城府管理"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
-      lore: []
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 19, 20, 21, 22, 23 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
           lore:
             - "<white><line>"
     buttons:
       - id: "storage"
         slot: 10
-        material: "BARREL"
-        title: "<white>仓储"
-        lore: ["<white>查看资源与历史"]
+        material: "CHEST"
+        title: "<yellow>仓  储"
+        lore:
+          - "<gray>查看资源与历史记录"
+          - "<gray>▸ 仓库储量总览"
+          - "<gray>▸ 资源变动记录"
       - id: "residents"
         slot: 11
         material: "VILLAGER_SPAWN_EGG"
-        title: "<white>居民"
-        lore: ["<white>查看居民与招募"]
+        title: "<green>居  民"
+        lore:
+          - "<gray>查看居民与招募"
+          - "<gray>▸ 居民属性概览"
+          - "<gray>▸ 消耗粮食招募"
       - id: "tech"
         slot: 12
         material: "ENCHANTING_TABLE"
-        title: "<white>科技"
-        lore: ["<white>研究科技"]
+        title: "<light_purple>科  技"
+        lore:
+          - "<gray>研究科技树"
+          - "<gray>▸ 五大分支科技"
+          - "<gray>▸ 消耗资源解锁"
       - id: "production"
         slot: 13
-        material: "CHEST"
-        title: "<white>生产"
-        lore: ["<white>生产概览"]
+        material: "CRAFTING_TABLE"
+        title: "<gold>生  产"
+        lore:
+          - "<gray>生产系统概览"
+          - "<gray>▸ 各建筑产出速率"
+          - "<gray>▸ 原料消耗统计"
       - id: "combat"
         slot: 14
-        material: "IRON_SWORD"
-        title: "<white>战斗"
-        lore: ["<white>防御与受损状态"]
+        material: "DIAMOND_SWORD"
+        title: "<red>战  斗"
+        lore:
+          - "<gray>防御与受损状态"
+          - "<gray>▸ 建筑生命值"
+          - "<gray>▸ 哨塔与兵营"
       - id: "logistics"
         slot: 15
-        material: "MINECART"
-        title: "<white>物流"
-        lore: ["<white>铁轨与路由"]
+        material: "POWERED_RAIL"
+        title: "<blue>物  流"
+        lore:
+          - "<gray>铁轨与运输网络"
+          - "<gray>▸ 矿车路由管理"
+          - "<gray>▸ 自动货物调配"
       - id: "border"
         slot: 16
         material: "NETHER_STAR"
-        title: "<white>边界"
-        lore: ["<white>显示15秒边界预览"]
+        title: "<aqua>边  界"
+        lore:
+          - "<gray>显示城镇边界预览"
+          - "<gray>▸ 持续 15 秒"
+          - "<gray>▸ 绿色=可建造"
 
   storage:
     title: "<white>仓储总览"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
     buttons:
       - id: "history"
-        slot: 21
-        material: "PAPER"
-        title: "<white>历史"
-        lore: ["<white>查看最近100条记录"]
-      - id: "stats"
-        slot: 23
+        slot: 30
         material: "WRITABLE_BOOK"
-        title: "<white>统计"
-        lore: ["<white>查看资源统计"]
+        title: "<gold>变动历史"
+        lore:
+          - "<gray>查看最近 100 条"
+          - "<gray>资源变动记录"
+      - id: "stats"
+        slot: 32
+        material: "PAPER"
+        title: "<light_purple>统计报表"
+        lore:
+          - "<gray>产量与消耗统计"
+          - "<gray>▸ 每小时净产出"
+          - "<gray>▸ 增长趋势图表"
 
   resident:
     title: "<white>居民管理"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 23, 24, 25 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
     buttons:
       - id: "recruit"
         slot: 22
         material: "EMERALD"
-        title: "<white>招募"
-        lore: ["<white>消耗粮食招募居民"]
+        title: "<green>招募居民"
+        lore:
+          - "<gray>消耗 <gold>粮食</gold> 招募新居民"
+          - "<gray>居民将自动分配属性"
+          - "<gray>可在城府分配工作岗位"
 
   tech:
     title: "<white>科技树"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 19, 20, 21, 22, 23, 24, 25 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
     dynamic-lists:
       tech-list:
-        slots: [10, 11, 12, 13, 14, 15]
+        slots: [ 10, 11, 12, 13, 14, 15 ]
         material: "LECTERN"
-        title: "<white><tech_name>"
-        lore: ["<white><tech_hint>"]
+        title: "<gold><tech_name>"
+        lore:
+          - "<white><tech_hint>"
 
   production:
     title: "<white>生产系统"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
 
   building:
     title: "<white><building_name>"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 19, 20, 21, 22, 23 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
     buttons:
       - id: "upgrade"
         slot: 10
         material: "DIAMOND"
-        title: "<white>升级"
-        lore: ["<white>提升建筑等级"]
+        title: "<aqua>升  级"
+        lore:
+          - "<gray>消耗资源提升等级"
+          - "<gray>▸ 产量 / 效率提升"
       - id: "move"
         slot: 12
-        material: "PAPER"
-        title: "<white>移动"
-        lore: ["<white>创建移动待确认"]
+        material: "FEATHER"
+        title: "<yellow>移  动"
+        lore:
+          - "<gray>迁移建筑位置"
+          - "<gray>▸ 等级与配置保留"
+          - "<gray>▸ 走到新位置确认"
       - id: "delete"
         slot: 14
         material: "BARRIER"
-        title: "<white>删除"
-        lore: ["<white>创建删除待确认"]
+        title: "<red>删  除"
+        lore:
+          - "<gray>拆除当前建筑"
+          - "<gray>▸ 掉落建筑核心"
+          - "<gray>▸ 请输入 /slg confirm"
       - id: "repair"
         slot: 16
         material: "ANVIL"
-        title: "<white>修复"
-        lore: ["<white>消耗资源恢复生命"]
+        title: "<green>修  复"
+        lore:
+          - "<gray>消耗资源恢复生命值"
+          - "<gray>▸ 需要对应材料"
 
   combat:
     title: "<white>战斗系统"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 21, 22, 23 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
 
   logistics:
     title: "<white>物流系统"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
 
   rpg-link:
     title: "<white>RPG 联动"
     glass:
-      material: "GRAY_STAINED_GLASS_PANE"
-      name: "<white> "
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
     body:
-      slots: [4, 5, 6, 7, 8]
+      slots: [ 21, 22, 23 ]
       templates:
-        - material: "PAPER"
-          name: "<white> "
-          lore: ["<white><line>"]
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"

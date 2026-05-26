@@ -1,5 +1,6 @@
 package io.github.adlamb.cubex.gameplay
 
+import io.github.adlamb.cubex.audio.SoundService
 import io.github.adlamb.cubex.config.PluginConfigs
 import io.github.adlamb.cubex.database.DatabaseManager
 import io.github.adlamb.cubex.gameplay.model.*
@@ -96,6 +97,7 @@ class GameplayFacade(
     fun createTown(player: Player, name: String): TownState? {
         if (repository.townByOwner(player.uniqueId) != null) {
             messages.send(player, "town.create.exists")
+            SoundService.playError(player)
             return null
         }
 
@@ -103,6 +105,7 @@ class GameplayFacade(
         val trimmedName = name.trim()
         if (trimmedName.isNotEmpty() && !trimmedName.matches(Regex("[a-zA-Z0-9_]+"))) {
             messages.send(player, "town.create.invalid-name")
+            SoundService.playError(player)
             return null
         }
 
@@ -113,6 +116,7 @@ class GameplayFacade(
         }
         if (overlap) {
             messages.send(player, "town.create.overlap")
+            SoundService.playError(player)
             return null
         }
         val now = System.currentTimeMillis()
@@ -148,6 +152,7 @@ class GameplayFacade(
         markInitialTech(town, player.uniqueId)
         placeTownHall(town, location)
         messages.send(player, "town.create.success", Placeholder.unparsed("name", town.name))
+        SoundService.playAt(location, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f)
         return town
     }
 
@@ -159,6 +164,7 @@ class GameplayFacade(
 
         previewBorder(center, radius, dust, 15)
         messages.send(player, "town.border.preview", Placeholder.unparsed("radius", town.radius.toString()))
+        SoundService.playTo(player, Sound.BLOCK_BEACON_ACTIVATE, 0.5f, 1.5f)
         return true
     }
 
@@ -194,7 +200,7 @@ class GameplayFacade(
     }
 
     fun openStorage(player: Player) {
-        val town = townOf(player) ?: return messages.send(player, "town.missing")
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
         val balances = repository.loadBalances(town.id)
         val latest = repository.ledger(town.id, 5)
         val body = registry.resources.values.sortedBy { it.category.ordinal }.map { resource ->
@@ -215,7 +221,7 @@ class GameplayFacade(
     }
 
     fun openResidents(player: Player) {
-        val town = townOf(player) ?: return messages.send(player, "town.missing")
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
         val residents = repository.residentsByTown(town.id)
         val body = buildList {
             add(lineEntry("居民数量: ${residents.size}/${town.residentLimit}"))
@@ -239,7 +245,7 @@ class GameplayFacade(
     }
 
     fun openTech(player: Player) {
-        val town = townOf(player) ?: return messages.send(player, "town.missing")
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
         val researched = repository.techProgress(town.id)
         val techNodes = registry.techNodes.values.sortedBy { it.branch.ordinal * 100 + it.townLevel }
         val body = buildList {
@@ -273,7 +279,7 @@ class GameplayFacade(
     }
 
     fun openProduction(player: Player) {
-        val town = townOf(player) ?: return messages.send(player, "town.missing")
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
         val balances = repository.loadBalances(town.id)
         val body = listOf(
             lineEntry("木材: ${balances["wood"] ?: 0L}"),
@@ -332,7 +338,7 @@ class GameplayFacade(
     }
 
     fun openLogistics(player: Player) {
-        val town = townOf(player) ?: return messages.send(player, "town.missing")
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
         val routes = repository.routes(town.id)
         val body = buildList {
             add(lineEntry("路由数量: ${routes.size}"))
@@ -355,11 +361,13 @@ class GameplayFacade(
         val town = townOf(player) ?: return false
         if (!canUseBuilding(town.id, buildingKey)) {
             messages.send(player, "building.locked", Placeholder.unparsed("building", buildingKey))
+            SoundService.playError(player)
             return false
         }
         val descriptor = registry.findBuilding(buildingKey) ?: return false
         player.inventory.addItem(createWand(descriptor))
         messages.send(player, "command.wand.given", Placeholder.unparsed("building", descriptor.displayName))
+        SoundService.playTo(player, Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.0f)
         return true
     }
 
@@ -394,34 +402,40 @@ class GameplayFacade(
         val descriptor = registry.findBuilding(buildingKey) ?: return false
         if (!canUseBuilding(town.id, buildingKey)) {
             messages.send(player, "building.locked", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
 
         val base = block.getRelative(face).location.block.location
         if (!isWithinTown(town, base)) {
             messages.send(player, "building.outside-town", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
         
         // 检查单区块限制
         if (!supportsSingleChunkFootprint(base, descriptor)) {
             messages.send(player, "building.invalid-terrain", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
 
         if (checkBuildingOverlap(buildingKey, base)) {
             messages.send(player, "building.overlap", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
         
         if (repository.buildingsByTown(town.id).count { !it.collapsed } >= town.buildingLimit) {
             messages.send(player, "building.limit-reached", Placeholder.unparsed("limit", town.buildingLimit.toString()))
+            SoundService.playError(player)
             return false
         }
 
         val cost = scaledCost(descriptor, 1)
         if (!hasResources(town.id, cost)) {
             messages.send(player, "building.insufficient", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
 
@@ -570,6 +584,7 @@ class GameplayFacade(
             val cost = mapOf("stone" to stone, "food" to food)
             if (!hasResources(townId, cost)) {
                 messages.send(player, "building.insufficient", Placeholder.unparsed("building", buildingKey))
+                SoundService.playError(player)
                 return@executeRegion
             }
             cost.forEach { (resource, amount) ->
@@ -641,6 +656,7 @@ class GameplayFacade(
         val cost = descriptor.buildCost.mapValues { (_, amount) -> ceil(amount * (1.0 + 0.65 * building.level)).toLong() }
         if (!hasResources(town.id, cost)) {
             messages.send(player, "building.insufficient", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playError(player)
             return false
         }
         cost.forEach { (resource, amount) ->
@@ -679,6 +695,7 @@ class GameplayFacade(
             ),
         )
         messages.send(player, "building.pending-delete")
+        SoundService.playTo(player, Sound.BLOCK_NOTE_BLOCK_BIT, 0.8f, 1.0f)
         return true
     }
 
@@ -705,6 +722,7 @@ class GameplayFacade(
             ),
         )
         messages.send(player, "building.pending-move")
+        SoundService.playTo(player, Sound.BLOCK_NOTE_BLOCK_BIT, 0.8f, 1.0f)
         return true
     }
 
@@ -781,6 +799,7 @@ class GameplayFacade(
                     repository.updateBuilding(updated)
                     registerBuildingBounds(building.id, updated.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
                     messages.send(player, "building.moved")
+                    SoundService.playAt(actualLocation, Sound.BLOCK_PISTON_EXTEND, 1.0f, 1.0f)
                 }.exceptionally { ex ->
                     plugin.logger.severe("移动建筑失败: ${ex.message}")
                     messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
@@ -798,10 +817,12 @@ class GameplayFacade(
         val count = repository.residentsByTown(town.id).count { it.active }
         if (count >= town.residentLimit) {
             messages.send(player, "resident.limit-reached")
+            SoundService.playError(player)
             return false
         }
         if (!hasResources(town.id, mapOf("food" to 50L))) {
             messages.send(player, "resident.insufficient-food")
+            SoundService.playError(player)
             return false
         }
 
@@ -845,6 +866,7 @@ class GameplayFacade(
             repository.saveResident(resident)
         }
         messages.send(player, "resident.recruited", Placeholder.unparsed("name", "居民"))
+        SoundService.playTo(player, Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f)
         return true
     }
 
@@ -854,6 +876,7 @@ class GameplayFacade(
         val researched = repository.techProgress(town.id)
         if (researched.contains(node.key)) {
             messages.send(player, "tech.already", Placeholder.unparsed("tech", node.displayName))
+            SoundService.playError(player)
             return false
         }
         if (town.level < node.townLevel) {
@@ -863,14 +886,17 @@ class GameplayFacade(
                 Placeholder.unparsed("tech", node.displayName),
                 Placeholder.unparsed("level", node.townLevel.toString()),
             )
+            SoundService.playError(player)
             return false
         }
         if (node.prerequisites.any { !researched.contains(it.lowercase()) }) {
             messages.send(player, "tech.prerequisite")
+            SoundService.playError(player)
             return false
         }
         if (!hasResources(town.id, node.cost)) {
             messages.send(player, "tech.insufficient", Placeholder.unparsed("tech", node.displayName))
+            SoundService.playError(player)
             return false
         }
         node.cost.forEach { (resource, amount) ->
@@ -878,6 +904,7 @@ class GameplayFacade(
         }
         repository.markTech(town.id, node.key, player.uniqueId)
         messages.send(player, "tech.researched", Placeholder.unparsed("tech", node.displayName))
+        SoundService.playTo(player, Sound.ENTITY_PLAYER_LEVELUP, 0.6f, 2.0f)
         return true
     }
 
@@ -912,6 +939,7 @@ class GameplayFacade(
         val town = repository.townById(resident.townId) ?: return true
         val owner = plugin.server.getPlayer(town.ownerUuid) ?: return true
         messages.send(owner, "resident.died", Placeholder.unparsed("name", resident.name))
+        SoundService.playTo(owner, Sound.ENTITY_VILLAGER_DEATH, 1.0f, 1.0f)
         return true
     }
 

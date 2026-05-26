@@ -1,5 +1,6 @@
 package io.github.adlamb.cubex.menu
 
+import io.github.adlamb.cubex.audio.SoundService
 import io.github.adlamb.cubex.config.MenuBodyTemplate
 import io.github.adlamb.cubex.config.MenuItemDefaults
 import io.github.adlamb.cubex.config.MenuItemConfigs
@@ -16,6 +17,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
@@ -60,6 +62,7 @@ class MenuFactory(
         renderDynamicLists(holder, inventory, menu, context, menuKey)
 
         player.openInventory(inventory)
+        SoundService.playTo(player, Sound.BLOCK_NOTE_BLOCK_HARP, 0.3f, 1.5f)
         messages.send(player, "command.menu.opened", Placeholder.unparsed("menu", plainText.serialize(title)))
     }
 
