@@ -228,9 +228,9 @@ class SchematicLoader(private val plugin: JavaPlugin) {
                                                         val markerType = line1.uppercase()
                                                         val replacement: Material? = when (markerType) {
                                                             CORE_MARKER -> Material.BARREL
-                                                            LOGISTICS_INPUT_MARKER -> Material.HOPPER
-                                                            LOGISTICS_OUTPUT_MARKER -> Material.HOPPER
-                                                            POWER_MARKER -> Material.REDSTONE_BLOCK
+                                                            LOGISTICS_INPUT_MARKER -> Material.DROPPER
+                                                            LOGISTICS_OUTPUT_MARKER -> Material.DISPENSER
+                                                            POWER_MARKER -> Material.RESIN_BRICK_WALL
                                                             else -> null
                                                         }
 
