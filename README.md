@@ -6,6 +6,9 @@
     <img src="https://img.shields.io/badge/Kotlin-2.3-purple?style=flat-square" alt="Kotlin 2.3">
     <img src="https://img.shields.io/badge/Java-21-orange?style=flat-square" alt="Java 21">
     <img src="https://img.shields.io/badge/Folia--supported-yellow?style=flat-square" alt="Folia Supported">
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+      <img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey?style=flat-square" alt="CC BY-NC-SA 4.0">
+    </a>
   </p>
 </div>
 
