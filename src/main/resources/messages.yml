@@ -30,6 +30,7 @@ building:
   limit-reached: "<prefix><red>建筑数量已达上限 <limit>。</red>"
   overlap: "<prefix><red><building> 与现有建筑重叠，请调整位置。</red>"
   insufficient: "<prefix><red><building> 资源不足。</red>"
+  failed: "<prefix><red><building> 操作失败。</red>"
   built: "<prefix><green>建筑已成功建造：<building>。</green>"
   no-repair-needed: "<prefix><gray>该建筑当前不需要修复。</gray>"
   repair-cost: "<prefix><yellow>修复消耗: 石头 <stone>, 粮食 <food></yellow>"
@@ -53,6 +54,25 @@ tech:
   insufficient: "<prefix><red><tech> 研究资源不足。</red>"
   researched: "<prefix><green>科技已研究：<tech>。</green>"
 
+power:
+  cable:
+    given: "<prefix><green>已发放 1 根电力缆线。</green>"
+    missing: "<prefix><red>没有电力缆线，请使用 /slg power cable 获取。</red>"
+  source:
+    selected: "<prefix><gold>已选择供电源: <building> - 请右键用电建筑的 POWER 节点。</gold>"
+    invalid: "<prefix><red><building> 不是发电建筑。</red>"
+  target:
+    invalid: "<prefix><red><building> 不是用电建筑。</red>"
+    self: "<prefix><red>不能将建筑连接到自身。</red>"
+    duplicate: "<prefix><red><source> 与 <target> 已经连接。</red>"
+    full: "<prefix><red><building> 节点缆线已达上限 (最多4根)。</red>"
+    already-connected: "<prefix><red><building> 已有电力连接。</red>"
+    too-far: "<prefix><red>电力节点距离过远，最多只能连接 12 格。</red>"
+  connected: "<prefix><green><source> -> <target> 连接已建立。</green>"
+  disconnected: "<prefix><yellow>电力连接已断开。</yellow>"
+  disconnected-missing: "<prefix><red>该建筑没有电力连接。</red>"
+  marker-missing: "<prefix><red><building> 缺少 POWER 节点标记，无法完成此操作。</red>"
+
 resource:
   history:
     line: "<prefix><gray><delta></gray> <white><resource></white> <dark_gray>来自</dark_gray> <gray><source></gray>"
@@ -70,6 +90,7 @@ command:
       confirm: "<gray>/slg confirm</gray> <dark_gray>-</dark_gray> <white>确认移动或删除</white>"
       residents: "<gray>/slg residents</gray> <dark_gray>-</dark_gray> <white>查看居民</white>"
       recruit: "<gray>/slg recruit</gray> <dark_gray>-</dark_gray> <white>招募居民</white>"
+      power: "<gray>/slg power [cable]</gray> <dark_gray>-</dark_gray> <white>查看电力或获取缆线</white>"
       border: "<gray>/slg border</gray> <dark_gray>-</dark_gray> <white>显示领地边界</white>"
   wand:
     given: "<prefix><green>已发放 <building> 建筑核心。</green>"

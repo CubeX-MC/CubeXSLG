@@ -20,4 +20,10 @@ class MarkerKeys(plugin: JavaPlugin) {
     val schemPasteX = NamespacedKey(plugin, "schem_paste_x")
     val schemPasteY = NamespacedKey(plugin, "schem_paste_y")
     val schemPasteZ = NamespacedKey(plugin, "schem_paste_z")
+    val powerNodeX = NamespacedKey(plugin, "power_node_x")
+    val powerNodeY = NamespacedKey(plugin, "power_node_y")
+    val powerNodeZ = NamespacedKey(plugin, "power_node_z")
+    val powerEntityRole = NamespacedKey(plugin, "power_entity_role")
+    val powerConnectionId = NamespacedKey(plugin, "power_connection_id")
+    val powerCable = NamespacedKey(plugin, "power_cable")
 }

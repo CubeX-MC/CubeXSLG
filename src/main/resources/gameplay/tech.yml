@@ -93,6 +93,17 @@ tech:
       plank: 50
     unlock-buildings:
       - warehouse
+  power_basics:
+    display-name: 基础电力
+    branch: PRODUCTION
+    town-level: 1
+    prerequisites:
+      - initial_processing
+    cost:
+      plank: 50
+      ingot: 20
+    unlock-buildings:
+      - windmill
   metal_smelting:
     display-name: 金属冶炼
     branch: PRODUCTION

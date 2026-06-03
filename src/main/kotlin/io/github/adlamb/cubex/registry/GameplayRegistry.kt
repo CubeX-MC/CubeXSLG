@@ -71,6 +71,8 @@ data class BuildingDescriptor(
     val buildCost: Map<String, Long>,
     val footprint: List<BlockSpec>,
     val recipe: ProductionRecipe? = null,
+    val powerProduction: Int = 0,
+    val powerCost: Int = 0,
 )
 
 data class TechNode(
@@ -158,6 +160,8 @@ data class GameplayRegistry(
                                 cycleTicks = recipeSection.getInt("cycle-ticks", 20),
                             )
                         },
+                        powerProduction = section.getInt("power-production", 0).coerceAtLeast(0),
+                        powerCost = section.getInt("power-cost", 0).coerceAtLeast(0),
                     )
                 },
                 townLevels = towns.getConfigurationSection("levels")?.getKeys(false)?.associate { key ->

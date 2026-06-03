@@ -25,9 +25,10 @@ object MenuItemDefaults {
                     MenuButtonTemplate("residents", 11, "VILLAGER_SPAWN_EGG", "<green>居  民", listOf("<gray>查看居民与招募", "<gray>▸ 居民属性概览", "<gray>▸ 消耗粮食招募")),
                     MenuButtonTemplate("tech", 12, "ENCHANTING_TABLE", "<light_purple>科  技", listOf("<gray>研究科技树", "<gray>▸ 五大分支科技", "<gray>▸ 消耗资源解锁")),
                     MenuButtonTemplate("production", 13, "CRAFTING_TABLE", "<gold>生  产", listOf("<gray>生产系统概览", "<gray>▸ 各建筑产出速率", "<gray>▸ 原料消耗统计")),
-                    MenuButtonTemplate("combat", 14, "DIAMOND_SWORD", "<red>战  斗", listOf("<gray>防御与受损状态", "<gray>▸ 建筑生命值", "<gray>▸ 哨塔与兵营")),
-                    MenuButtonTemplate("logistics", 15, "POWERED_RAIL", "<blue>物  流", listOf("<gray>铁轨与运输网络", "<gray>▸ 矿车路由管理", "<gray>▸ 自动货物调配")),
-                    MenuButtonTemplate("border", 16, "NETHER_STAR", "<aqua>边  界", listOf("<gray>显示城镇边界预览", "<gray>▸ 持续 15 秒", "<gray>▸ 绿色=可建造")),
+                    MenuButtonTemplate("power", 14, "LIGHTNING_ROD", "<yellow>电  力", listOf("<gray>查看供电与连接状态", "<gray>▸ 发电 / 负载容量", "<gray>▸ 加工建筑通电情况")),
+                    MenuButtonTemplate("combat", 15, "DIAMOND_SWORD", "<red>战  斗", listOf("<gray>防御与受损状态", "<gray>▸ 建筑生命值", "<gray>▸ 哨塔与兵营")),
+                    MenuButtonTemplate("logistics", 16, "POWERED_RAIL", "<blue>物  流", listOf("<gray>铁轨与运输网络", "<gray>▸ 矿车路由管理", "<gray>▸ 自动货物调配")),
+                    MenuButtonTemplate("border", 31, "NETHER_STAR", "<aqua>边  界", listOf("<gray>显示城镇边界预览", "<gray>▸ 持续 15 秒", "<gray>▸ 绿色=可建造")),
                 ),
             ),
             "storage" to MenuViewConfig(
@@ -101,6 +102,24 @@ object MenuItemDefaults {
             ),
             "production" to MenuViewConfig(
                 title = "<white>生产系统",
+                glass = MenuItemTemplate(
+                    material = "BLACK_STAINED_GLASS_PANE",
+                    name = "<dark_gray> ",
+                    lore = listOf("<dark_gray> "),
+                ),
+                body = MenuBodyConfig(
+                    slots = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25),
+                    templates = listOf(
+                        MenuBodyTemplate(
+                            material = "LIGHT_BLUE_STAINED_GLASS_PANE",
+                            name = "<aqua> ",
+                            lore = listOf("<white><line>"),
+                        ),
+                    ),
+                ),
+            ),
+            "power" to MenuViewConfig(
+                title = "<white>电力系统",
                 glass = MenuItemTemplate(
                     material = "BLACK_STAINED_GLASS_PANE",
                     name = "<dark_gray> ",

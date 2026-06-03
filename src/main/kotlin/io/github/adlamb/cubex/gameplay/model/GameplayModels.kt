@@ -132,6 +132,14 @@ data class TownResourceBalance(
     val amount: Long,
 )
 
+data class PowerConnectionState(
+    val id: String,
+    val townId: TownId,
+    val sourceBuildingId: BuildingId,
+    val targetBuildingId: BuildingId,
+    val createdAt: Long,
+)
+
 fun UUID.asString(): String = toString()
 
 fun String.toTownId(): TownId = TownId(this)

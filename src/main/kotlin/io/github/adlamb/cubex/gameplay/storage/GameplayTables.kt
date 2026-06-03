@@ -155,3 +155,17 @@ object CombatStateTable : Table("cubexslg_combat_state") {
 
     override val primaryKey = PrimaryKey(townId, buildingId)
 }
+
+object PowerConnectionsTable : Table("cubexslg_power_connections") {
+    val id = varchar("id", 36)
+    val townId = varchar("town_id", 36)
+    val sourceBuildingId = varchar("source_building_id", 36)
+    val targetBuildingId = varchar("target_building_id", 36).uniqueIndex()
+    val createdAt = long("created_at")
+
+    init {
+        index(isUnique = true, sourceBuildingId, targetBuildingId)
+    }
+
+    override val primaryKey = PrimaryKey(id)
+}

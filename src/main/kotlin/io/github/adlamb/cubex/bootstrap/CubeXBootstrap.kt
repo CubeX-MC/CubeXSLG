@@ -7,6 +7,7 @@ import io.github.adlamb.cubex.feature.admin.AdminModule
 import io.github.adlamb.cubex.feature.building.BuildingModule
 import io.github.adlamb.cubex.feature.combat.CombatModule
 import io.github.adlamb.cubex.feature.logistics.LogisticsModule
+import io.github.adlamb.cubex.feature.power.PowerModule
 import io.github.adlamb.cubex.feature.production.ProductionModule
 import io.github.adlamb.cubex.feature.resource.ResourceModule
 import io.github.adlamb.cubex.feature.resident.ResidentModule
@@ -65,6 +66,7 @@ class CubeXBootstrap(private val plugin: JavaPlugin) {
             TownModule(context),
             ResourceModule(context),
             ProductionModule(context),
+            PowerModule(context),
             BuildingModule(context),
             ResidentModule(context),
             TechModule(context),

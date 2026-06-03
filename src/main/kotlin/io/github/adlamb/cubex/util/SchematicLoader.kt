@@ -13,6 +13,7 @@ import org.bukkit.block.Sign
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.concurrent.CompletableFuture
 
 data class SchematicDimensions(
@@ -72,8 +73,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
         val key = "${buildingType.lowercase()}_level$level"
         dimensionCache[key]?.let { return it }
 
-        val schemFolder = File(plugin.dataFolder, "schematics")
-        val schemFile = File(schemFolder, "${key}.schem")
+        val schemFile = resolveSchematicFile("${key}.schem")
         if (!schemFile.exists()) return null
 
         return try {
@@ -115,8 +115,7 @@ class SchematicLoader(private val plugin: JavaPlugin) {
             return null
         }
 
-        val schemFolder = File(plugin.dataFolder, "schematics")
-        val schemFile = File(schemFolder, schematicName)
+        val schemFile = resolveSchematicFile(schematicName)
         if (!schemFile.exists()) {
             plugin.logger.warning("Schematic 文件不存在: $schematicName")
             return null
@@ -288,6 +287,22 @@ class SchematicLoader(private val plugin: JavaPlugin) {
      */
     fun getSchematicFileName(buildingType: String, level: Int): String {
         return "${buildingType.lowercase()}_level$level.schem"
+    }
+
+    private fun resolveSchematicFile(schematicName: String): File {
+        val schemFolder = File(plugin.dataFolder, "schematics")
+        if (!schemFolder.exists()) {
+            schemFolder.mkdirs()
+        }
+        val schemFile = File(schemFolder, schematicName)
+        if (schemFile.exists()) {
+            return schemFile
+        }
+
+        plugin.getResource("schematics/$schematicName")?.use { input ->
+            FileOutputStream(schemFile).use { output -> input.copyTo(output) }
+        }
+        return schemFile
     }
 
     fun removeSchematicFromWorld(

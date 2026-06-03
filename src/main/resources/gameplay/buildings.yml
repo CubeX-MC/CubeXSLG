@@ -86,6 +86,7 @@ buildings:
         wood: 2
       output:
         plank: 1
+    power-cost: 1
   masonry:
     display-name: 石材加工厂
     wand-material: BRICK
@@ -105,6 +106,7 @@ buildings:
         stone: 2
       output:
         brick: 1
+    power-cost: 1
   alchemy:
     display-name: 炼金厂
     wand-material: BLAZE_POWDER
@@ -124,6 +126,22 @@ buildings:
         ore: 2
       output:
         ingot: 1
+    power-cost: 1
+  windmill:
+    display-name: 风车
+    wand-material: WIND_CHARGE
+    core-material: BARREL
+    kind: UTILITY
+    build-cost:
+      wood: 30
+      stone: 20
+      plank: 10
+    footprint:
+      - dx: 0
+        dy: 0
+        dz: 0
+        material: BARREL
+    power-production: 4
   barracks:
     display-name: 兵营
     wand-material: IRON_SWORD

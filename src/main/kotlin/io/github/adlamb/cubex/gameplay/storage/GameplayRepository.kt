@@ -4,6 +4,7 @@ import io.github.adlamb.cubex.gameplay.model.*
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -26,6 +27,7 @@ class GameplayRepository {
             RailRoutesTable,
             CargoJobsTable,
             CombatStateTable,
+            PowerConnectionsTable,
         )
     }
 
@@ -232,6 +234,7 @@ class GameplayRepository {
         RailRoutesTable.deleteWhere { RailRoutesTable.townId eq townId.value }
         CargoJobsTable.deleteWhere { CargoJobsTable.townId eq townId.value }
         CombatStateTable.deleteWhere { CombatStateTable.townId eq townId.value }
+        PowerConnectionsTable.deleteWhere { PowerConnectionsTable.townId eq townId.value }
         val buildingIds = BuildingsTable.selectAll().filter { it[BuildingsTable.townId] == townId.value }
             .map { it[BuildingsTable.id] }
         buildingIds.forEach { id ->
@@ -378,6 +381,63 @@ class GameplayRepository {
             }
     }
 
+    fun powerConnectionsByTown(townId: TownId): List<PowerConnectionState> = transaction {
+        PowerConnectionsTable.selectAll()
+            .filter { it[PowerConnectionsTable.townId] == townId.value }
+            .sortedBy { it[PowerConnectionsTable.createdAt] }
+            .map { row -> row.toPowerConnectionState() }
+    }
+
+    fun outgoingPowerConnections(buildingId: BuildingId): List<PowerConnectionState> = transaction {
+        PowerConnectionsTable.selectAll()
+            .filter { it[PowerConnectionsTable.sourceBuildingId] == buildingId.value }
+            .sortedBy { it[PowerConnectionsTable.createdAt] }
+            .map { row -> row.toPowerConnectionState() }
+    }
+
+    fun incomingPowerConnection(buildingId: BuildingId): PowerConnectionState? = transaction {
+        PowerConnectionsTable.selectAll()
+            .firstOrNull { it[PowerConnectionsTable.targetBuildingId] == buildingId.value }
+            ?.let { row -> row.toPowerConnectionState() }
+    }
+
+    fun powerConnection(sourceBuildingId: BuildingId, targetBuildingId: BuildingId): PowerConnectionState? = transaction {
+        PowerConnectionsTable.selectAll()
+            .firstOrNull {
+                it[PowerConnectionsTable.sourceBuildingId] == sourceBuildingId.value &&
+                    it[PowerConnectionsTable.targetBuildingId] == targetBuildingId.value
+            }
+            ?.let { row -> row.toPowerConnectionState() }
+    }
+
+    fun powerConnectionById(connectionId: String): PowerConnectionState? = transaction {
+        PowerConnectionsTable.selectAll()
+            .firstOrNull { it[PowerConnectionsTable.id] == connectionId }
+            ?.let { row -> row.toPowerConnectionState() }
+    }
+
+    fun savePowerConnection(connection: PowerConnectionState) = transaction {
+        PowerConnectionsTable.deleteWhere { PowerConnectionsTable.id eq connection.id }
+        PowerConnectionsTable.insert {
+            it[id] = connection.id
+            it[townId] = connection.townId.value
+            it[sourceBuildingId] = connection.sourceBuildingId.value
+            it[targetBuildingId] = connection.targetBuildingId.value
+            it[createdAt] = connection.createdAt
+        }
+    }
+
+    fun deletePowerConnection(connectionId: String) = transaction {
+        PowerConnectionsTable.deleteWhere { PowerConnectionsTable.id eq connectionId }
+    }
+
+    fun deletePowerConnectionsForBuilding(buildingId: BuildingId) = transaction {
+        PowerConnectionsTable.deleteWhere {
+            (PowerConnectionsTable.sourceBuildingId eq buildingId.value) or
+                (PowerConnectionsTable.targetBuildingId eq buildingId.value)
+        }
+    }
+
     private fun ResultRow.toTownState(): TownState = TownState(
         id = TownId(this[TownsTable.id]),
         ownerUuid = UUID.fromString(this[TownsTable.ownerUuid]),
@@ -437,5 +497,13 @@ class GameplayRepository {
         active = this[ResidentsTable.active],
         createdAt = this[ResidentsTable.createdAt],
         updatedAt = this[ResidentsTable.updatedAt],
+    )
+
+    private fun ResultRow.toPowerConnectionState(): PowerConnectionState = PowerConnectionState(
+        id = this[PowerConnectionsTable.id],
+        townId = TownId(this[PowerConnectionsTable.townId]),
+        sourceBuildingId = BuildingId(this[PowerConnectionsTable.sourceBuildingId]),
+        targetBuildingId = BuildingId(this[PowerConnectionsTable.targetBuildingId]),
+        createdAt = this[PowerConnectionsTable.createdAt],
     )
 }

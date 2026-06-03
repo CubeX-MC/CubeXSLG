@@ -7,6 +7,7 @@ enum class MenuId {
     RESIDENT,
     TECH,
     PRODUCTION,
+    POWER,
     COMBAT,
     LOGISTICS,
     RPG_LINK,

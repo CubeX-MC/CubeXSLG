@@ -45,8 +45,16 @@ menus:
           - "<gray>生产系统概览"
           - "<gray>▸ 各建筑产出速率"
           - "<gray>▸ 原料消耗统计"
-      - id: "combat"
+      - id: "power"
         slot: 14
+        material: "LIGHTNING_ROD"
+        title: "<yellow>电  力"
+        lore:
+          - "<gray>查看供电与连接状态"
+          - "<gray>▸ 发电 / 负载容量"
+          - "<gray>▸ 加工建筑通电情况"
+      - id: "combat"
+        slot: 15
         material: "DIAMOND_SWORD"
         title: "<red>战  斗"
         lore:
@@ -54,7 +62,7 @@ menus:
           - "<gray>▸ 建筑生命值"
           - "<gray>▸ 哨塔与兵营"
       - id: "logistics"
-        slot: 15
+        slot: 16
         material: "POWERED_RAIL"
         title: "<blue>物  流"
         lore:
@@ -62,7 +70,7 @@ menus:
           - "<gray>▸ 矿车路由管理"
           - "<gray>▸ 自动货物调配"
       - id: "border"
-        slot: 16
+        slot: 31
         material: "NETHER_STAR"
         title: "<aqua>边  界"
         lore:
@@ -146,6 +154,20 @@ menus:
 
   production:
     title: "<white>生产系统"
+    glass:
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: "<dark_gray> "
+      lore: [ "<dark_gray> " ]
+    body:
+      slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
+      templates:
+        - material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+          name: "<aqua> "
+          lore:
+            - "<white><line>"
+
+  power:
+    title: "<white>电力系统"
     glass:
       material: "BLACK_STAINED_GLASS_PANE"
       name: "<dark_gray> "

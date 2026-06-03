@@ -22,8 +22,8 @@ import io.github.adlamb.cubex.util.SchematicDimensions
 import io.github.adlamb.cubex.util.SchematicLoader
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
-import org.bukkit.Bukkit
 import org.bukkit.Color
+import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
@@ -31,19 +31,28 @@ import org.bukkit.Sound
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.TileState
+import org.bukkit.entity.Bat
+import org.bukkit.entity.Chicken
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
 import org.bukkit.entity.TNTPrimed
 import org.bukkit.entity.Villager
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.java.JavaPlugin
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 private const val TOWN_HALL_KEY = "town_hall"
+private const val POWER_NODE_ROLE = "node"
+private const val POWER_ENDPOINT_ROLE = "endpoint"
+private const val MAX_POWER_DISTANCE = 12.0
+private const val MAX_POWER_CONNECTIONS_PER_SOURCE = 4
 
 class GameplayFacade(
     private val plugin: JavaPlugin,
@@ -59,6 +68,7 @@ class GameplayFacade(
     private val schematicLoader = SchematicLoader(plugin)
     private val started = AtomicBoolean(false)
     private val buildingBoundsMap = mutableMapOf<BuildingId, BuildingBounds>()
+    private val pendingPowerSources = ConcurrentHashMap<UUID, PendingPowerSource>()
     private var tickCounter = 0
 
     data class BuildingBounds(
@@ -70,6 +80,26 @@ class GameplayFacade(
         val maxX: Int,
         val maxY: Int,
         val maxZ: Int,
+    )
+
+    private data class PendingPowerSource(
+        val buildingId: BuildingId,
+        val expiresAt: Long,
+    )
+
+    private data class PowerConnectionView(
+        val connection: PowerConnectionState,
+        val sourceName: String,
+        val targetName: String,
+        val powered: Boolean,
+    )
+
+    private data class PowerGridSnapshot(
+        val totalProduction: Int,
+        val totalDemand: Int,
+        val poweredConsumers: Set<BuildingId>,
+        val unpoweredConsumers: Set<BuildingId>,
+        val connectionViews: List<PowerConnectionView>,
     )
 
     fun initialize() {
@@ -85,6 +115,7 @@ class GameplayFacade(
 
         scheduler.global().runLater(100) {
             loadBuildingBounds()
+            restorePowerRuntimeState()
         }
 
         scheduler.global().runTimer(20, 20) {
@@ -188,6 +219,7 @@ class GameplayFacade(
                     "residents" to MenuButtonContext(action = { openResidents(it) }),
                     "tech" to MenuButtonContext(action = { openTech(it) }),
                     "production" to MenuButtonContext(action = { openProduction(it) }),
+                    "power" to MenuButtonContext(action = { openPower(it) }),
                     "combat" to MenuButtonContext(action = { openCombat(it) }),
                     "logistics" to MenuButtonContext(action = { openLogistics(it) }),
                     "border" to MenuButtonContext(action = {
@@ -294,6 +326,28 @@ class GameplayFacade(
         )
     }
 
+    fun openPower(player: Player) {
+        val town = townOf(player) ?: run { messages.send(player, "town.missing"); SoundService.playError(player); return }
+        val buildings = repository.buildingsByTown(town.id)
+        val snapshot = calculatePowerSnapshot(town.id, buildings)
+        val body = buildList {
+            add(lineEntry("总发电: ${snapshot.totalProduction}"))
+            add(lineEntry("总负载: ${snapshot.totalDemand}"))
+            add(lineEntry("通电建筑: ${snapshot.poweredConsumers.size}"))
+            add(lineEntry("断电建筑: ${snapshot.unpoweredConsumers.size}"))
+            add(lineEntry("连接数量: ${snapshot.connectionViews.size}"))
+            snapshot.connectionViews.take(5).forEach { view ->
+                val state = if (view.powered) "供电中" else "未供电"
+                add(lineEntry("${view.sourceName} -> ${view.targetName} [$state]"))
+            }
+        }
+        menuFactory.open(
+            player = player,
+            menuId = MenuId.POWER,
+            context = MenuRenderContext(bodyEntries = body),
+        )
+    }
+
     fun openBuildingMenu(player: Player, buildingId: String) {
         val building = repository.buildingById(BuildingId(buildingId)) ?: return
         val descriptor = registry.findBuilding(building.buildingKey)
@@ -302,6 +356,16 @@ class GameplayFacade(
             add(lineEntry("等级: ${building.level}"))
             add(lineEntry("生命值: ${building.health}/${building.maxHealth}"))
             add(lineEntry("状态: ${if (building.collapsed) "坍塌" else "运行中"}"))
+            descriptor?.let {
+                if (it.powerProduction > 0) {
+                    add(lineEntry("发电: ${it.powerProduction}/tick"))
+                }
+                if (it.powerCost > 0) {
+                    val incoming = repository.incomingPowerConnection(building.id)
+                    add(lineEntry("耗电: ${it.powerCost}/tick"))
+                    add(lineEntry("供电连接: ${if (incoming != null) "已连接" else "未连接"}"))
+                }
+            }
         }
         menuFactory.open(
             player = player,
@@ -371,6 +435,13 @@ class GameplayFacade(
         return true
     }
 
+    fun givePowerCable(player: Player): Boolean {
+        player.inventory.addItem(createPowerCable())
+        messages.send(player, "power.cable.given")
+        SoundService.playTo(player, Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.0f)
+        return true
+    }
+
     fun createWand(building: BuildingDescriptor): ItemStack = ItemStack(building.wandMaterial).apply {
         editMeta { meta ->
             meta.displayName(Component.text("${building.displayName}建筑核心"))
@@ -379,7 +450,23 @@ class GameplayFacade(
         }
     }
 
+    private fun createPowerCable(): ItemStack = ItemStack(Material.LEAD).apply {
+        editMeta { meta ->
+            meta.displayName(Component.text("电力缆线"))
+            meta.lore(listOf(Component.text("右键 POWER 节点以建立或断开电力连接。")))
+            meta.persistentDataContainer.set(keys.powerCable, PersistentDataType.BYTE, 1)
+        }
+    }
+
     fun buildingFrom(item: ItemStack?): String? = item?.itemMeta?.persistentDataContainer?.get(keys.buildingType, PersistentDataType.STRING)
+
+    private fun isPowerCable(item: ItemStack?): Boolean {
+        if (item == null || item.type != Material.LEAD) {
+            return false
+        }
+        val meta = item.itemMeta ?: return false
+        return meta.persistentDataContainer.has(keys.powerCable, PersistentDataType.BYTE)
+    }
 
     fun getBuildingDimensions(buildingKey: String, level: Int): SchematicDimensions? {
         return schematicLoader.getSchematicDimensions(buildingKey, level)
@@ -452,32 +539,23 @@ class GameplayFacade(
         
         // 等待异步完成并处理结果
         future.thenAccept { result ->
+            if (!validatePastedBuilding(player, descriptor, result)) {
+                cleanupPastedSchematic(base.world, result)
+                return@thenAccept
+            }
+
             var actualLocation = base
-            
-            // 如果有核心方块标记，更新位置并写入 NBT 数据
+            val powerMarker = result.markers["POWER"]
+
             result.markers["CORE"]?.let { coreLoc ->
                 actualLocation = coreLoc
-                val coreBlock = coreLoc.block
-                if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
-                    val tileState = coreBlock.state as TileState
-                    val pdc = tileState.persistentDataContainer
-                    pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
-                    pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
-                    pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
-                    pdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
-                    pdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
-                    pdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
-                    pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
-                    pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
-                    pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
-                    pdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
-                    pdc.set(keys.schemPasteX, PersistentDataType.INTEGER, result.pasteOriginX)
-                    pdc.set(keys.schemPasteY, PersistentDataType.INTEGER, result.pasteOriginY)
-                    pdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, result.pasteOriginZ)
-                    tileState.update(true, false)
-                    
-                    plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
-                }
+                val tileState = coreLoc.block.state as? TileState ?: return@thenAccept
+                writeBuildingCoreMetadata(tileState, town.id, buildingId, buildingKey, result, powerMarker)
+                plugin.logger.info("建筑 $buildingId 核心方块已设置: ${coreLoc.blockX}, ${coreLoc.blockY}, ${coreLoc.blockZ}")
+            } ?: run {
+                cleanupPastedSchematic(base.world, result)
+                messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
+                return@thenAccept
             }
             
             val actualHealth = result.nonAirBlockCount.coerceAtLeast(1)
@@ -503,6 +581,7 @@ class GameplayFacade(
             repository.saveBuilding(state, emptyList())
             
             registerBuildingBounds(buildingId, state.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
+            syncPowerNode(state)
             
             // 扣除资源
             cost.forEach { (resource, amount) ->
@@ -551,6 +630,7 @@ class GameplayFacade(
         val level = building.level
         val worldName = building.world
         val maxHealth = building.maxHealth
+        val descriptor = registry.findBuilding(buildingKey) ?: return false
 
         val uid = player.uniqueId
         val townId = town.id
@@ -603,25 +683,17 @@ class GameplayFacade(
                 return@executeRegion
             }
             future.thenAccept { result ->
+                if (!validatePastedBuilding(player, descriptor, result)) {
+                    cleanupPastedSchematic(world, result)
+                    return@thenAccept
+                }
+
+                val powerMarker = result.markers["POWER"]
                 result.markers["CORE"]?.let { coreLoc ->
                     val newCoreBlock = coreLoc.block
                     if (newCoreBlock.type == Material.BARREL && newCoreBlock.state is TileState) {
                         val tileState = newCoreBlock.state as TileState
-                        val newPdc = tileState.persistentDataContainer
-                        newPdc.set(keys.townId, PersistentDataType.STRING, townId.value)
-                        newPdc.set(keys.buildingId, PersistentDataType.STRING, buildingId)
-                        newPdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
-                        newPdc.set(keys.schemOriginX, PersistentDataType.INTEGER, ox)
-                        newPdc.set(keys.schemOriginY, PersistentDataType.INTEGER, oy)
-                        newPdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, oz)
-                        newPdc.set(keys.schemWidth, PersistentDataType.INTEGER, w)
-                        newPdc.set(keys.schemHeight, PersistentDataType.INTEGER, h)
-                        newPdc.set(keys.schemLength, PersistentDataType.INTEGER, l)
-                        newPdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, maxHealth)
-                        newPdc.set(keys.schemPasteX, PersistentDataType.INTEGER, pasteX)
-                        newPdc.set(keys.schemPasteY, PersistentDataType.INTEGER, pasteY)
-                        newPdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, pasteZ)
-                        tileState.update(true, false)
+                        writeBuildingCoreMetadata(tileState, townId, BuildingId(buildingId), buildingKey, result.copy(nonAirBlockCount = maxHealth), powerMarker)
 
                         val newBuilding = repository.buildingById(BuildingId(buildingId)) ?: return@thenAccept
                         val updatedBuilding = newBuilding.copy(
@@ -632,6 +704,8 @@ class GameplayFacade(
                         repository.updateBuilding(updatedBuilding)
                         unregisterBuildingBounds(BuildingId(buildingId))
                         registerBuildingBounds(BuildingId(buildingId), worldName, ox, oy, oz, w, h, l)
+                        syncPowerNode(updatedBuilding)
+                        syncPowerConnectionsForBuilding(updatedBuilding.id)
                     }
                 }
                 recalculateHealthInternal(repository.buildingById(BuildingId(buildingId)) ?: return@thenAccept)
@@ -747,8 +821,8 @@ class GameplayFacade(
 
             "move" -> {
                 val building = repository.buildingById(BuildingId(pending.payload)) ?: return false
+                val descriptor = registry.findBuilding(building.buildingKey) ?: return false
                 val target = player.getTargetBlockExact(6) ?: return false
-                val targetLoc = target.location
                 val face = player.rayTraceBlocks(6.0)?.hitBlockFace ?: BlockFace.UP
                 val newBase = target.getRelative(face).location.block.location
 
@@ -764,28 +838,24 @@ class GameplayFacade(
                     return false
                 }
                 future.thenAccept { result ->
+                    if (!validatePastedBuilding(player, descriptor, result)) {
+                        cleanupPastedSchematic(newBase.world, result)
+                        return@thenAccept
+                    }
+
                     var actualLocation = newBase
+                    val powerMarker = result.markers["POWER"]
                     result.markers["CORE"]?.let { coreLoc ->
                         actualLocation = coreLoc
                         val coreBlock = coreLoc.block
                         if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
                             val tileState = coreBlock.state as TileState
-                            val newPdc = tileState.persistentDataContainer
-                            newPdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
-                            newPdc.set(keys.buildingId, PersistentDataType.STRING, building.id.value)
-                            newPdc.set(keys.buildingType, PersistentDataType.STRING, building.buildingKey)
-                            newPdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
-                            newPdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
-                            newPdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
-                            newPdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
-                            newPdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
-                            newPdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
-                            newPdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
-                            newPdc.set(keys.schemPasteX, PersistentDataType.INTEGER, result.pasteOriginX)
-                            newPdc.set(keys.schemPasteY, PersistentDataType.INTEGER, result.pasteOriginY)
-                            newPdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, result.pasteOriginZ)
-                            tileState.update(true, false)
+                            writeBuildingCoreMetadata(tileState, town.id, building.id, building.buildingKey, result, powerMarker)
                         }
+                    } ?: run {
+                        cleanupPastedSchematic(newBase.world, result)
+                        messages.send(player, "building.failed", Placeholder.unparsed("building", building.buildingKey))
+                        return@thenAccept
                     }
                     val updated = building.copy(
                         world = actualLocation.world.name,
@@ -798,6 +868,7 @@ class GameplayFacade(
                     )
                     repository.updateBuilding(updated)
                     registerBuildingBounds(building.id, updated.world, result.originX, result.originY, result.originZ, result.width, result.height, result.length)
+                    syncPowerNode(updated)
                     messages.send(player, "building.moved")
                     SoundService.playAt(actualLocation, Sound.BLOCK_PISTON_EXTEND, 1.0f, 1.0f)
                 }.exceptionally { ex ->
@@ -949,7 +1020,9 @@ class GameplayFacade(
             val doHealthRecalc = tickCounter % 100 == 0
             repository.towns().forEach { town ->
                 val researched = repository.techProgress(town.id)
-                repository.buildingsByTown(town.id).forEach { building ->
+                val buildings = repository.buildingsByTown(town.id)
+                val powerSnapshot = calculatePowerSnapshot(town.id, buildings)
+                buildings.forEach { building ->
                     if (!building.active || building.collapsed) {
                         return@forEach
                     }
@@ -957,6 +1030,9 @@ class GameplayFacade(
                     val multiplier = levelMultiplier(building.level)
                     val recipe = descriptor.recipe
                     if (recipe == null) {
+                        return@forEach
+                    }
+                    if (descriptor.powerCost > 0 && building.id !in powerSnapshot.poweredConsumers) {
                         return@forEach
                     }
                     if (recipe.input.isNotEmpty() && !hasResources(town.id, recipe.input)) {
@@ -973,7 +1049,7 @@ class GameplayFacade(
                     }
                 }
                 if (doHealthRecalc) {
-                    repository.buildingsByTown(town.id).forEach { building ->
+                    buildings.forEach { building ->
                         if (building.collapsed || !building.active) return@forEach
                         recalculateHealth(building.id)
                     }
@@ -1033,6 +1109,38 @@ class GameplayFacade(
         plugin.logger.info("Schematic 模式：建筑投影已由 WorldEdit 处理")
     }
 
+    private fun restorePowerRuntimeState() {
+        clearPowerRuntimeEntities()
+        val allBuildings = repository.towns().flatMap { town -> repository.buildingsByTown(town.id) }
+        allBuildings.forEach { building ->
+            syncPowerNode(building)
+        }
+        repository.towns().flatMap { town -> repository.powerConnectionsByTown(town.id) }.forEach { connection ->
+            if (!spawnOrRefreshPowerConnectionVisual(connection)) {
+                repository.deletePowerConnection(connection.id)
+            }
+        }
+    }
+
+    private fun clearPowerRuntimeEntities() {
+        plugin.server.worlds.forEach { world ->
+            val powerEntities = world.entities
+                .filter { entity ->
+                    entity.persistentDataContainer.has(keys.powerEntityRole, PersistentDataType.STRING) ||
+                        entity.persistentDataContainer.has(keys.powerConnectionId, PersistentDataType.STRING)
+                }
+            powerEntities.forEach { entity ->
+                entity.persistentDataContainer.remove(keys.powerConnectionId)
+                entity.persistentDataContainer.remove(keys.powerEntityRole)
+            }
+            powerEntities.forEach { entity ->
+                scheduler.executeEntity(entity) {
+                    entity.remove()
+                }
+            }
+        }
+    }
+
     private fun placeTownHall(town: TownState, location: Location) {
         val buildingId = BuildingId(town.id.value)
         
@@ -1046,6 +1154,12 @@ class GameplayFacade(
         }
         
         future.thenAccept { result ->
+            if (!result.coreFound || result.markers["CORE"] == null) {
+                cleanupPastedSchematic(location.world, result)
+                plugin.logger.severe("城镇大厅 schematic 缺少 CORE 标记: $schemFileName")
+                return@thenAccept
+            }
+
             var actualLocation = location
             
             result.markers["CORE"]?.let { coreLoc ->
@@ -1054,21 +1168,7 @@ class GameplayFacade(
                 val coreBlock = actualLocation.block
                 if (coreBlock.type == Material.BARREL && coreBlock.state is TileState) {
                     val tileState = coreBlock.state as TileState
-                    val pdc = tileState.persistentDataContainer
-                    pdc.set(keys.townId, PersistentDataType.STRING, town.id.value)
-                    pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
-                    pdc.set(keys.buildingType, PersistentDataType.STRING, TOWN_HALL_KEY)
-                    pdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
-                    pdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
-                    pdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
-                    pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
-                    pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
-                    pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
-                    pdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
-                    pdc.set(keys.schemPasteX, PersistentDataType.INTEGER, result.pasteOriginX)
-                    pdc.set(keys.schemPasteY, PersistentDataType.INTEGER, result.pasteOriginY)
-                    pdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, result.pasteOriginZ)
-                    tileState.update(true, false)
+                    writeBuildingCoreMetadata(tileState, town.id, buildingId, TOWN_HALL_KEY, result, null)
                     
                     plugin.logger.info("城镇大厅核心方块已设置: ${actualLocation.blockX}, ${actualLocation.blockY}, ${actualLocation.blockZ}")
                 }
@@ -1104,6 +1204,7 @@ class GameplayFacade(
     }
 
     fun removeBuildingProjection(building: BuildingState) {
+        cleanupPowerStateForBuilding(building)
         unregisterBuildingBounds(building.id)
         val world = plugin.server.getWorld(building.world) ?: run {
             plugin.logger.warning("建筑 ${building.id.value} 所在世界 ${building.world} 不存在，跳过清除")
@@ -1266,6 +1367,7 @@ class GameplayFacade(
     }
 
     private fun triggerBuildingExplosion(building: BuildingState) {
+        cleanupPowerStateForBuilding(building)
         val world = plugin.server.getWorld(building.world) ?: return
         val core = building.location(plugin) ?: return
         val coreBlock = core.block
@@ -1325,6 +1427,399 @@ class GameplayFacade(
                 }
             }
         }
+    }
+
+    fun handlePowerEntityInteract(player: Player, entity: Entity): Boolean {
+        val role = entity.persistentDataContainer.get(keys.powerEntityRole, PersistentDataType.STRING) ?: return false
+        if (role != POWER_NODE_ROLE) {
+            return role == POWER_ENDPOINT_ROLE
+        }
+        if (!isPowerCable(player.inventory.itemInMainHand)) {
+            messages.send(player, "power.cable.missing")
+            SoundService.playError(player)
+            return true
+        }
+
+        val buildingId = entity.persistentDataContainer.get(keys.buildingId, PersistentDataType.STRING) ?: return true
+        val building = repository.buildingById(BuildingId(buildingId)) ?: return true
+        val town = repository.townById(building.townId) ?: return true
+        if (town.ownerUuid != player.uniqueId) {
+            return true
+        }
+
+        val descriptor = registry.findBuilding(building.buildingKey) ?: return true
+        if (descriptor.powerProduction > 0) {
+            pendingPowerSources[player.uniqueId] = PendingPowerSource(building.id, System.currentTimeMillis() + 60_000)
+            messages.send(player, "power.source.selected", Placeholder.unparsed("building", descriptor.displayName))
+            SoundService.playTo(player, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.6f, 1.2f)
+            return true
+        }
+
+        val pending = currentPendingPowerSource(player.uniqueId)
+
+        if (descriptor.powerCost > 0) {
+            val incoming = repository.incomingPowerConnection(building.id)
+            if (incoming != null && pending == null) {
+                deletePowerConnectionState(incoming)
+                messages.send(player, "power.disconnected")
+                SoundService.playTo(player, Sound.BLOCK_CHAIN_BREAK, 0.8f, 1.0f)
+                return true
+            }
+            if (pending == null) {
+                messages.send(player, "power.disconnected-missing")
+                SoundService.playError(player)
+                return true
+            }
+
+            val sourceBuilding = repository.buildingById(pending.buildingId)
+            val sourceDescriptor = sourceBuilding?.let { registry.findBuilding(it.buildingKey) }
+            if (sourceBuilding == null || sourceDescriptor == null || sourceDescriptor.powerProduction <= 0) {
+                pendingPowerSources.remove(player.uniqueId)
+                messages.send(player, "power.source.invalid", Placeholder.unparsed("building", sourceDescriptor?.displayName ?: descriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+            if (sourceBuilding.id == building.id) {
+                messages.send(player, "power.target.self")
+                SoundService.playError(player)
+                return true
+            }
+            if (building.townId != sourceBuilding.townId || building.world != sourceBuilding.world) {
+                messages.send(player, "power.target.invalid", Placeholder.unparsed("building", descriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+            if (repository.powerConnection(sourceBuilding.id, building.id) != null) {
+                messages.send(
+                    player,
+                    "power.target.duplicate",
+                    Placeholder.unparsed("source", sourceDescriptor.displayName),
+                    Placeholder.unparsed("target", descriptor.displayName),
+                )
+                SoundService.playError(player)
+                return true
+            }
+            if (repository.incomingPowerConnection(building.id) != null) {
+                messages.send(player, "power.target.already-connected", Placeholder.unparsed("building", descriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+            if (repository.outgoingPowerConnections(sourceBuilding.id).size >= MAX_POWER_CONNECTIONS_PER_SOURCE) {
+                messages.send(player, "power.target.full", Placeholder.unparsed("building", sourceDescriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+
+            val sourceNode = powerNodeLocation(sourceBuilding)
+            val targetNode = powerNodeLocation(building)
+            if (sourceNode == null || targetNode == null) {
+                messages.send(player, "power.marker-missing", Placeholder.unparsed("building", descriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+            if (sourceNode.distance(targetNode) > MAX_POWER_DISTANCE) {
+                messages.send(player, "power.target.too-far")
+                SoundService.playError(player)
+                return true
+            }
+
+            val connection = PowerConnectionState(
+                id = UUID.randomUUID().toString(),
+                townId = town.id,
+                sourceBuildingId = sourceBuilding.id,
+                targetBuildingId = building.id,
+                createdAt = System.currentTimeMillis(),
+            )
+            repository.savePowerConnection(connection)
+            if (!spawnOrRefreshPowerConnectionVisual(connection)) {
+                repository.deletePowerConnection(connection.id)
+                messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
+                SoundService.playError(player)
+                return true
+            }
+            consumePowerCable(player)
+            pendingPowerSources.remove(player.uniqueId)
+            messages.send(
+                player,
+                "power.connected",
+                Placeholder.unparsed("source", sourceDescriptor.displayName),
+                Placeholder.unparsed("target", descriptor.displayName),
+            )
+            SoundService.playTo(player, Sound.BLOCK_CHAIN_PLACE, 0.8f, 1.2f)
+            return true
+        }
+
+        messages.send(player, "power.target.invalid", Placeholder.unparsed("building", descriptor.displayName))
+        SoundService.playError(player)
+        return true
+    }
+
+    fun handlePowerEntityUnleash(entity: Entity) {
+        val connectionId = entity.persistentDataContainer.get(keys.powerConnectionId, PersistentDataType.STRING) ?: return
+        val connection = repository.powerConnectionById(connectionId) ?: return
+        deletePowerConnectionState(connection)
+        val targetBuilding = repository.buildingById(connection.targetBuildingId)
+        val town = targetBuilding?.let { repository.townById(it.townId) }
+        val owner = town?.let { plugin.server.getPlayer(it.ownerUuid) }
+        if (owner != null) {
+            messages.send(owner, "power.disconnected")
+        }
+    }
+
+    private fun calculatePowerSnapshot(townId: TownId, buildings: List<BuildingState>): PowerGridSnapshot {
+        val activeBuildings = buildings.filter { it.active && !it.collapsed }
+        val descriptors = activeBuildings.associateWith { building -> registry.findBuilding(building.buildingKey) }
+        val connections = repository.powerConnectionsByTown(townId).sortedBy { it.createdAt }
+        val totalProduction = activeBuildings.sumOf { building -> descriptors[building]?.powerProduction ?: 0 }
+        val consumers = activeBuildings.filter { building -> (descriptors[building]?.powerCost ?: 0) > 0 }
+        val totalDemand = consumers.sumOf { building -> descriptors[building]?.powerCost ?: 0 }
+        val powered = mutableSetOf<BuildingId>()
+
+        connections.groupBy { it.sourceBuildingId }.forEach { (sourceId, sourceConnections) ->
+            val sourceBuilding = activeBuildings.firstOrNull { it.id == sourceId } ?: return@forEach
+            var remaining = descriptors[sourceBuilding]?.powerProduction ?: 0
+            sourceConnections.sortedBy { it.createdAt }.forEach { connection ->
+                val targetBuilding = activeBuildings.firstOrNull { it.id == connection.targetBuildingId } ?: return@forEach
+                val demand = descriptors[targetBuilding]?.powerCost ?: 0
+                if (demand > 0 && remaining >= demand) {
+                    powered += targetBuilding.id
+                    remaining -= demand
+                }
+            }
+        }
+
+        val connectionViews = connections.mapNotNull { connection ->
+            val sourceBuilding = buildings.firstOrNull { it.id == connection.sourceBuildingId } ?: return@mapNotNull null
+            val targetBuilding = buildings.firstOrNull { it.id == connection.targetBuildingId } ?: return@mapNotNull null
+            val sourceName = registry.findBuilding(sourceBuilding.buildingKey)?.displayName ?: sourceBuilding.buildingKey
+            val targetName = registry.findBuilding(targetBuilding.buildingKey)?.displayName ?: targetBuilding.buildingKey
+            PowerConnectionView(connection, sourceName, targetName, targetBuilding.id in powered)
+        }
+
+        return PowerGridSnapshot(
+            totalProduction = totalProduction,
+            totalDemand = totalDemand,
+            poweredConsumers = powered,
+            unpoweredConsumers = consumers.map { it.id }.toSet() - powered,
+            connectionViews = connectionViews,
+        )
+    }
+
+    private fun validatePastedBuilding(player: Player, descriptor: BuildingDescriptor, result: io.github.adlamb.cubex.util.PasteScanResult): Boolean {
+        if (!result.coreFound || result.markers["CORE"] == null) {
+            messages.send(player, "building.failed", Placeholder.unparsed("building", descriptor.displayName))
+            return false
+        }
+        if (descriptorRequiresPowerNode(descriptor) && result.markers["POWER"] == null) {
+            messages.send(player, "power.marker-missing", Placeholder.unparsed("building", descriptor.displayName))
+            return false
+        }
+        return true
+    }
+
+    private fun cleanupPastedSchematic(world: org.bukkit.World, result: io.github.adlamb.cubex.util.PasteScanResult) {
+        schematicLoader.removeSchematicFromWorld(result.originX, result.originY, result.originZ, result.width, result.height, result.length, world)
+    }
+
+    private fun descriptorRequiresPowerNode(descriptor: BuildingDescriptor): Boolean {
+        return descriptor.powerProduction > 0 || descriptor.powerCost > 0
+    }
+
+    private fun writeBuildingCoreMetadata(
+        tileState: TileState,
+        townId: TownId,
+        buildingId: BuildingId,
+        buildingKey: String,
+        result: io.github.adlamb.cubex.util.PasteScanResult,
+        powerMarker: Location?,
+    ) {
+        val pdc = tileState.persistentDataContainer
+        pdc.set(keys.townId, PersistentDataType.STRING, townId.value)
+        pdc.set(keys.buildingId, PersistentDataType.STRING, buildingId.value)
+        pdc.set(keys.buildingType, PersistentDataType.STRING, buildingKey)
+        pdc.set(keys.schemOriginX, PersistentDataType.INTEGER, result.originX)
+        pdc.set(keys.schemOriginY, PersistentDataType.INTEGER, result.originY)
+        pdc.set(keys.schemOriginZ, PersistentDataType.INTEGER, result.originZ)
+        pdc.set(keys.schemWidth, PersistentDataType.INTEGER, result.width)
+        pdc.set(keys.schemHeight, PersistentDataType.INTEGER, result.height)
+        pdc.set(keys.schemLength, PersistentDataType.INTEGER, result.length)
+        pdc.set(keys.schemNonAirCount, PersistentDataType.INTEGER, result.nonAirBlockCount)
+        pdc.set(keys.schemPasteX, PersistentDataType.INTEGER, result.pasteOriginX)
+        pdc.set(keys.schemPasteY, PersistentDataType.INTEGER, result.pasteOriginY)
+        pdc.set(keys.schemPasteZ, PersistentDataType.INTEGER, result.pasteOriginZ)
+        if (powerMarker != null) {
+            pdc.set(keys.powerNodeX, PersistentDataType.INTEGER, powerMarker.blockX)
+            pdc.set(keys.powerNodeY, PersistentDataType.INTEGER, powerMarker.blockY)
+            pdc.set(keys.powerNodeZ, PersistentDataType.INTEGER, powerMarker.blockZ)
+        } else {
+            pdc.remove(keys.powerNodeX)
+            pdc.remove(keys.powerNodeY)
+            pdc.remove(keys.powerNodeZ)
+        }
+        tileState.update(true, false)
+    }
+
+    private fun cleanupPowerStateForBuilding(building: BuildingState) {
+        pendingPowerSources.entries.removeIf { it.value.buildingId == building.id }
+        val connectionIds = buildSet {
+            repository.outgoingPowerConnections(building.id).forEach { add(it.id) }
+            repository.incomingPowerConnection(building.id)?.let { add(it.id) }
+        }
+        connectionIds.forEach { id ->
+            repository.powerConnectionById(id)?.let { connection ->
+                deletePowerConnectionState(connection)
+            }
+        }
+        removePowerNode(building)
+    }
+
+    private fun deletePowerConnectionState(connection: PowerConnectionState) {
+        removePowerConnectionVisual(connection.id)
+        repository.deletePowerConnection(connection.id)
+    }
+
+    private fun currentPendingPowerSource(playerId: UUID): PendingPowerSource? {
+        val pending = pendingPowerSources[playerId] ?: return null
+        if (pending.expiresAt < System.currentTimeMillis()) {
+            pendingPowerSources.remove(playerId)
+            return null
+        }
+        return pending
+    }
+
+    private fun consumePowerCable(player: Player) {
+        if (player.gameMode == GameMode.CREATIVE) {
+            return
+        }
+        val item = player.inventory.itemInMainHand
+        if (!isPowerCable(item)) {
+            return
+        }
+        if (item.amount <= 1) {
+            player.inventory.setItemInMainHand(ItemStack(Material.AIR))
+        } else {
+            item.amount -= 1
+            player.inventory.setItemInMainHand(item)
+        }
+    }
+
+    private fun syncPowerConnectionsForBuilding(buildingId: BuildingId) {
+        repository.incomingPowerConnection(buildingId)?.let { spawnOrRefreshPowerConnectionVisual(it) }
+        repository.outgoingPowerConnections(buildingId).forEach { spawnOrRefreshPowerConnectionVisual(it) }
+    }
+
+    private fun syncPowerNode(building: BuildingState): Boolean {
+        val descriptor = registry.findBuilding(building.buildingKey) ?: return false
+        if (!descriptorRequiresPowerNode(descriptor) || building.collapsed || !building.active) {
+            removePowerNode(building)
+            return false
+        }
+        val nodeLocation = powerNodeLocation(building) ?: return false
+        val world = nodeLocation.world
+        val existing = world.getNearbyEntities(nodeLocation, 0.5, 0.5, 0.5)
+            .filterIsInstance<Chicken>()
+            .firstOrNull {
+                it.persistentDataContainer.get(keys.powerEntityRole, PersistentDataType.STRING) == POWER_NODE_ROLE &&
+                    it.persistentDataContainer.get(keys.buildingId, PersistentDataType.STRING) == building.id.value
+            }
+
+        val node = existing ?: world.spawn(nodeLocation, Chicken::class.java).apply {
+            setAI(false)
+            isInvisible = true
+            isSilent = true
+            isInvulnerable = true
+            setGravity(false)
+        }
+        node.teleport(nodeLocation)
+        node.persistentDataContainer.set(keys.powerEntityRole, PersistentDataType.STRING, POWER_NODE_ROLE)
+        node.persistentDataContainer.set(keys.buildingId, PersistentDataType.STRING, building.id.value)
+        return true
+    }
+
+    private fun removePowerNode(building: BuildingState) {
+        val world = plugin.server.getWorld(building.world) ?: return
+        world.entities
+            .filterIsInstance<Chicken>()
+            .filter {
+                it.persistentDataContainer.get(keys.powerEntityRole, PersistentDataType.STRING) == POWER_NODE_ROLE &&
+                    it.persistentDataContainer.get(keys.buildingId, PersistentDataType.STRING) == building.id.value
+            }
+            .forEach { entity ->
+                scheduler.executeEntity(entity) {
+                    entity.remove()
+                }
+            }
+    }
+
+    private fun spawnOrRefreshPowerConnectionVisual(connection: PowerConnectionState): Boolean {
+        removePowerConnectionVisual(connection.id)
+        val sourceBuilding = repository.buildingById(connection.sourceBuildingId) ?: return false
+        val targetBuilding = repository.buildingById(connection.targetBuildingId) ?: return false
+        val sourceNode = powerNodeLocation(sourceBuilding) ?: return false
+        val targetNode = powerNodeLocation(targetBuilding) ?: return false
+        if (sourceNode.world.uid != targetNode.world.uid) {
+            return false
+        }
+        if (sourceNode.distance(targetNode) > MAX_POWER_DISTANCE) {
+            return false
+        }
+        if (!syncPowerNode(sourceBuilding) || !syncPowerNode(targetBuilding)) {
+            return false
+        }
+
+        val sourceEntity = findPowerNodeEntity(sourceBuilding) ?: return false
+        val world = targetNode.world
+        val endpoint = world.spawn(targetNode, Bat::class.java).apply {
+            setAI(false)
+            isInvisible = true
+            isSilent = true
+            isInvulnerable = true
+            setGravity(false)
+        }
+        endpoint.persistentDataContainer.set(keys.powerEntityRole, PersistentDataType.STRING, POWER_ENDPOINT_ROLE)
+        endpoint.persistentDataContainer.set(keys.buildingId, PersistentDataType.STRING, targetBuilding.id.value)
+        endpoint.persistentDataContainer.set(keys.powerConnectionId, PersistentDataType.STRING, connection.id)
+        if (!endpoint.setLeashHolder(sourceEntity)) {
+            endpoint.remove()
+            return false
+        }
+        return true
+    }
+
+    private fun removePowerConnectionVisual(connectionId: String) {
+        plugin.server.worlds.forEach { world ->
+            world.entities
+                .filterIsInstance<Bat>()
+                .filter { it.persistentDataContainer.get(keys.powerConnectionId, PersistentDataType.STRING) == connectionId }
+                .forEach { entity ->
+                    scheduler.executeEntity(entity) {
+                        entity.persistentDataContainer.remove(keys.powerConnectionId)
+                        entity.persistentDataContainer.remove(keys.powerEntityRole)
+                        entity.remove()
+                    }
+                }
+        }
+    }
+
+    private fun findPowerNodeEntity(building: BuildingState): Chicken? {
+        val world = plugin.server.getWorld(building.world) ?: return null
+        return world.entities
+            .filterIsInstance<Chicken>()
+            .firstOrNull {
+                it.persistentDataContainer.get(keys.powerEntityRole, PersistentDataType.STRING) == POWER_NODE_ROLE &&
+                    it.persistentDataContainer.get(keys.buildingId, PersistentDataType.STRING) == building.id.value
+            }
+    }
+
+    private fun powerNodeLocation(building: BuildingState): Location? {
+        val coreBlock = building.location(plugin)?.block ?: return null
+        val tileState = coreBlock.state as? TileState ?: return null
+        val pdc = tileState.persistentDataContainer
+        val x = pdc.get(keys.powerNodeX, PersistentDataType.INTEGER) ?: return null
+        val y = pdc.get(keys.powerNodeY, PersistentDataType.INTEGER) ?: return null
+        val z = pdc.get(keys.powerNodeZ, PersistentDataType.INTEGER) ?: return null
+        val world = plugin.server.getWorld(building.world) ?: return null
+        return Location(world, x + 0.5, y.toDouble(), z + 0.5)
     }
 
     private fun canUseBuilding(townId: TownId, buildingKey: String): Boolean {
